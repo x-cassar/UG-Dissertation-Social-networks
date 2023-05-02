@@ -1,0 +1,432 @@
+---
+title: "Data Cleaning and Variable Generation"
+author: "B160473"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning=FALSE, error=FALSE, message=FALSE)
+```
+
+# Selecting packages and importing key functions
+
+
+```{r, results='hide'}
+library(tidyverse)
+library(jtools)
+library(skimr)
+library(performance)
+library(DescTools)
+library(lme4)
+library(flextable)
+library(tinytex)
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+
+# Importing the dataset
+
+The dataset imported - and made available with the dissertation submission - was already trimmed to consist solely of variables relevant to this dissertation, having already been screen for and cleaned of input errors. The full set of questions survey participants were asked is available in the appendices of the dissertation. 
+
+Participant names have been anonymised to alphanumeric codes, where the first letter indicates which site the participant forms part of - hence one of "O", "R","S" and "V"- the second indicates whether the individual was surveyed ("p") or not ("x"). The numbers are randomly allocated and bear no meaning.
+
+```{r}
+dissertation_data <- read_csv("Kenya_dissertation_data.csv")
+```
+
+
+# Creating and recoding variables 
+
+## Household level variables
+
+Some survey participants were not the main decision maker on dairy farming in the housheold, in which case they were asked to name the gender of the main decision maker. Here a variable is created to contain a complete list of hte genders of all decision makers, whether or not it was the decision maker who participated in the survey.
+
+```{r}
+dissertation_data<-dissertation_data %>% 
+  mutate(decision_maker_gender=case_when(decision_maker==1~parti_gender,
+                                  decision_maker==0~decision_maker_gender)) %>% 
+  mutate(decision_maker_gender=as.factor(decision_maker_gender))
+```
+
+
+As shown below, there are very few instances of participants with no education (literate and illiterate). For this reason, those with no formal education are grouped into a single level.
+Education level is also coded as a continuous variable which will be utilised later on.
+
+```{r}
+dissertation_data %>% 
+  count(education)
+
+dissertation_data<-dissertation_data %>% 
+  mutate(education=fct_recode(education, none="none_read"))
+
+dissertation_data<-dissertation_data %>% 
+  mutate(education_cont=case_when(education=="none"~1,
+                                  education=="primary"~2,
+                                  education=="above_primary"~3))
+
+dissertation_data %>% 
+  count(education)
+```
+
+
+Farm size, coded as three levels (0-0.5ha, 0.6-2.5ha, and >2.5ha), is also converted to a continuous variable.
+
+```{r}
+dissertation_data<-dissertation_data %>% 
+  mutate(farm_size_cont=case_when(farm_size=="0_0.5"~1,
+                                  farm_size=="0.6_2.5"~2,
+                                  farm_size=="greater_2.6"~3,
+                                  TRUE~NA_real_))
+```
+
+
+The order of the levels for education level and farm size are stipulated below. Above primary education and a farm size of 0.6-2.5ha are set as the respective reference levels by being placed first in the list. 
+
+```{r}
+dissertation_data<-
+  dissertation_data %>% 
+  mutate(education=factor(education, levels=(c("above_primary","none","primary"))),
+         farm_size=factor(farm_size, levels=c("0.6_2.5","0_0.5","greater_2.6")))
+```
+
+
+The price of milk is also calculated. This is taken to be the higher value of the reported market price and the reported cooperative price (where reported). 
+When missing, the market price was taken to be the higher of the mean market price reported by network members and the mean cooperative price reported for market members. This, however, is calcualted later down.
+```{r}
+dissertation_data<-dissertation_data %>% 
+  rowwise() %>% 
+  mutate(max_price=max(price_market, price_coop, na.rm=T)) %>% 
+  mutate(max_price=ifelse(max_price<0, NA, max_price))
+```
+
+
+
+To model the use of improved breeds within a logistic regression, the variable of what % of farmers' cattle are of an exotic or crossbred variety is convered to a binary variable as to whether a participant has any exotic or crossbred cattle. 
+```{r}
+dissertation_data<-dissertation_data %>% 
+  mutate(crossbreed_use=as.logical(ifelse(perc_crossbreed>0,T,F)))
+```
+
+
+It is also of interest as to whether network effects are seen for specific varieties of improved forage. Therefore, a series of variables as to whether a farmer uses a particular variety of improved forage is constructed via the code below. 
+The varieties encountered during data collected are listed in the first line of code. 
+
+```{r}
+rep_str <- c("calliandra resmodium nappier","desmodium nappier",
+             "license callander","nappier bracharia desmodium",
+             "nappier desmodium bracharia","nappies,bracharia maize,rhodes",
+             "nappier rhodes, desmodium")
+
+dissertation_data<-dissertation_data %>% 
+  mutate(feed_used_specific=as.character(feed_used_specific)) %>%
+  mutate(feed_used_specific=
+  ifelse(feed_used_specific%in%rep_str, str_replace_all(feed_used_specific, " ",
+        ";"), feed_used_specific)) %>%
+  mutate(feed_used_specific=str_remove_all(feed_used_specific,"grass")) %>%
+  mutate(feed_used_specific=na_if(feed_used_specific,"helps to increase milk production"),
+         feed_used_specific=na_if(feed_used_specific,"name not known"),
+         feed_used_specific=str_replace_all(feed_used_specific," and ", ";"),
+         feed_used_specific=str_replace_all(feed_used_specific,",", ";")) %>%
+  separate(feed_used_specific, sep =  ";" ,c("feed_1","feed_2","feed_3","feed_4")) %>%
+  mutate(across(c(feed_1:feed_4),~case_when(str_detect(.,"kaka")~"napier",
+         (str_detect(.,"nappi")|str_detect(.,"napi"))~"napier",
+         (str_detect(.,"desmo")|str_detect(.,"modium"))~"desmodium",
+         (str_detect(.,"brac")|str_detect(.,"aria"))~"bracchiaria",
+         (str_detect(.,"rode")|str_detect(.,"rhode"))~"rhodes grass",
+         (str_detect(.,"cali")|str_detect(.,"call"))~"calliandra",
+     (str_detect(.,"license")|str_detect(.,"luce")|str_detect(.,"lucian"))~"tree lucerne",
+          str_detect(.,"maize")~"maize",
+          str_detect(.,"lato")~"bracchiaria",
+          TRUE~NA_character_))) %>%
+  unite("specific_feed_used", feed_1:feed_4, na.rm = T,sep = ";") %>%
+  mutate(specific_feed_used=na_if(specific_feed_used, ""))
+```
+
+For reasons discussed in the dissertation, a variable capturing whether a farmer is part of a group - be it finance, farmer, or social group - is created.
+
+```{r}
+dissertation_data<-dissertation_data %>% 
+  mutate(group_member=ifelse(finance_group==T|farmer_group==T|social_groups==T,T,F))
+```
+
+
+Some instances are missing data on market distance. The following block serves to recover this by calculating the mean market distance of those network members who live within 15 minutes.
+
+```{r}
+
+dissertation_data<-merge(dissertation_data,
+dissertation_data %>% 
+  select(parti_name,market_distance,contains("person")) %>% 
+  select(-con_personal) %>% 
+  filter(is.na(market_distance)) %>% 
+  select(-market_distance) %>% 
+  mutate(across(contains("distance"),~ifelse(.>15,NA,1))) %>% 
+  mutate(across(c(person_1, person_2, person_3, person_4),
+                ~recode(., !!!set_names(dissertation_data$market_distance,
+                                        dissertation_data$parti_name)))) %>%  
+  mutate(person_1=person_1*person_1_distance,
+         person_2=person_2*person_2_distance,
+         person_3=person_3*person_3_distance,
+         person_4=person_4*person_4_distance) %>%
+  rowwise() %>% 
+  mutate(approx_market_distance=
+           mean(c(person_1, person_2, person_3, person_4), na.rm=T)) %>% 
+  select(parti_name, approx_market_distance)
+,by = "parti_name", all.x = T,all.y = F) %>% 
+  mutate(market_distance=
+           ifelse(is.na(market_distance)&approx_market_distance>0,
+                  approx_market_distance,market_distance)) %>% 
+  select(-approx_market_distance)
+
+```
+
+
+
+## Information source variables 
+
+The code in the following block organises and gather farmers' responses as to where they get their information about dairy farming in general ("info_received" variables) where they would would seek information about dairy farming ("info_source" variables). 
+
+Info_received and info_source questions were asked as a series of yes/no questions (see survey). Farmer field schools and volunteer trainers are here grouped in a single category, "lead". NGO projects and other extension are grouped into a category "ext_other", which in the case of info_received also includes vets - these were mentioned by just 4 farmers, and thus not enough to treat as a distinct category.
+
+```{r}
+##info received####
+dissertation_data<-
+  dissertation_data %>% 
+  mutate(info_other=as.character(info_other)) %>%
+  mutate(info_received_other_media=
+    ifelse(str_detect(info_other, "youtube|book|google")==T,T,F)) %>% 
+  mutate(info_received_media=
+    ifelse(info_received_tv==T|info_received_radio==T|info_received_newspaper==T,T,F)) %>%
+  mutate(info_received_media=
+    ifelse(is.na(info_other)==F&str_detect(info_other,"youtube|book|google")==T,
+           T,info_received_media)) %>%
+  mutate(info_received_gov=
+    ifelse(info_received_gov_ext==T|info_received_gov_proj==T,T,F)) %>% 
+  mutate(info_received_ext_other=
+    ifelse(info_received_ext_off==T|info_received_ngo_proj==T|
+           (is.na(info_other)==F&str_detect(info_other, "vet")==T),T,F)) %>% 
+  mutate(info_received_lead=
+    ifelse(info_received_ffs==T|info_received_vol_trainers==T,T,F)) %>% 
+  mutate(info_received_lead=
+           ifelse(is.na(info_other)==F&str_detect(info_other, "show")==T, 
+                  T,info_received_lead)) 
+
+##info sources####
+dissertation_data<-
+  dissertation_data %>% 
+  mutate(info_source_media=
+           ifelse(info_source_tv==T|info_source_radio==T|info_source_newspaper==T,T,F),
+         info_source_gov=ifelse(info_source_gov_ext==T|info_source_gov_proj==T,T,F),
+         info_source_ext_other=ifelse(info_source_ngo_proj==T|info_source_ext_off==T,T,F),
+         info_source_farmers=
+           ifelse(info_source_other_farmers==T|info_source_neighbours==T,T,F),
+         info_source_lead=
+           ifelse(info_source_ffs==T|info_source_vol_trainers==T,T,F),
+         info_source_vet=ifelse(info_source_vet==T|info_source_agrovet==T,T,F))
+
+```
+  
+
+## Network level variables
+
+The code below generates a variable of the number of individuals each participant named as part of their network (max 4), subsequently calculating how many of those individuals participated in the survey (and thus we have data on) ("known_network_members") and thus what proportion of the network is known ("prop_network_known").
+
+```{r}
+dissertation_data<-
+  merge(dissertation_data,
+dissertation_data %>% 
+  select(parti_name, person_1, person_2, person_3,person_4) %>% 
+  mutate(across(contains("person"), ~case_when(str_detect(.,"p|x")~1,
+                                               TRUE~NA_real_))) %>%
+  rowwise() %>% 
+  mutate(network_members=sum(c(person_1, person_2, person_3,person_4), na.rm = T)) %>% 
+  select(parti_name,network_members)
+)
+
+dissertation_data<-
+  merge(dissertation_data,
+dissertation_data %>% 
+  select(parti_name, person_1, person_2, person_3,person_4) %>% 
+  mutate(across(contains("person"), ~case_when(str_detect(.,"p")~1,
+                                               TRUE~NA_real_))) %>%
+  rowwise() %>% 
+  mutate(known_network_members=
+           sum(c(person_1, person_2, person_3,person_4), na.rm = T)) %>% 
+  select(parti_name,known_network_members)
+)
+
+dissertation_data<-
+  dissertation_data %>%
+  mutate(prop_network_known=
+           ifelse(network_members==0, 1,known_network_members/network_members))
+```
+
+### Adoption of technologies in network 
+In order to examine the influence of social networks, the adoption of technologies amongst farmers' network members must be calculated. Due to the methodology adopted, it is only for those network members who participated in the survey that technology adoption decisions are known. Therefore, all statistics regarding adoption in networks necessarily pertains solely to surveyed network members; information is missing for those network members which were unsurveyed. See dissertation for further discussion on this. 
+
+```{r}
+###vaccine####
+dissertation_data<-merge(dissertation_data,
+dissertation_data %>% 
+  mutate(across(c(person_1, person_2, person_3, person_4),
+                ~recode(., !!!set_names(dissertation_data$vaccine_use,
+                                        dissertation_data$parti_name)))) %>% 
+  select(parti_name,person_1, person_2, person_3, person_4) %>% 
+  mutate(across(c(person_1, person_2, person_3, person_4), as.numeric)) %>% 
+  rowwise() %>% 
+  mutate(vaccine_users=sum(person_1, person_2, person_3, person_4, na.rm=T)) %>% 
+  select(parti_name,vaccine_users)
+,by="parti_name",all.x = T,all.y = F) 
+
+###improved feed ####
+dissertation_data<-merge(dissertation_data,
+dissertation_data %>% 
+  mutate(across(c(person_1, person_2, person_3, person_4),
+                ~recode(., !!!set_names(dissertation_data$feed_use,
+                                        dissertation_data$parti_name)))) %>% 
+  select(parti_name,person_1, person_2, person_3, person_4) %>% 
+  mutate(across(c(person_1, person_2, person_3, person_4), as.numeric)) %>% 
+  rowwise() %>% 
+  mutate(feed_users=sum(person_1, person_2, person_3, person_4, na.rm=T)) %>% 
+  select(parti_name,feed_users)
+,by="parti_name",all.x = T,all.y = F) 
+
+###improved breed####
+dissertation_data<-merge(dissertation_data,
+dissertation_data %>% 
+  mutate(across(c(person_1, person_2, person_3, person_4),
+                ~recode(., !!!set_names(dissertation_data$crossbreed_use, 
+                                        dissertation_data$parti_name)))) %>% 
+  select(parti_name,person_1, person_2, person_3, person_4) %>% 
+  mutate(across(c(person_1, person_2, person_3, person_4), as.numeric)) %>% 
+  rowwise() %>% 
+  mutate(crossbreed_users=sum(person_1, person_2, person_3, person_4, na.rm=T)) %>% 
+  select(parti_name,crossbreed_users)
+,by="parti_name",all.x = T,all.y = F) 
+
+```
+
+### Network member characteristics
+
+To differentiate endogenous and exogenous effects (see dissertation), the characteristics of network members must be known. These are calculated below.
+```{r}
+for (var in c("age", "hh_depen", "num_cows","max_price",
+              "education_cont", "farm_size_cont")) {
+  person_select<-dissertation_data %>% 
+    select(parti_name, person_1, person_2, person_3,person_4)
+  
+  var_select<-dissertation_data %>% 
+    select(parti_name,var)  
+
+  temp_var_df<-person_select %>% 
+    mutate_all(funs(var=
+                      recode(., !!!set_names(var_select[,2], var_select$parti_name)))) %>%
+    select(-person_1, -person_2, -person_3,-person_4, -parti_name_var) %>% 
+    rowwise %>% 
+    mutate(network_mean=
+            mean(c(person_1_var, person_2_var, person_3_var,person_4_var), na.rm = T)) %>%
+    select(parti_name, network_mean) 
+  
+  names(temp_var_df)[2] <- paste0("network_mean_",var)
+  dissertation_data<-merge(dissertation_data,temp_var_df,
+        by.x = "parti_name", by.y="parti_name", all.x = T, all.y = F)
+}
+
+for (var in c("decision_maker_gender")) {
+  person_select<-dissertation_data %>% 
+    select(parti_name, person_1, person_2, person_3,person_4)
+  
+  var_select<-dissertation_data %>% 
+    select(parti_name,var)  
+  
+  temp_var_df<-person_select %>% 
+    mutate_all(funs(gender=
+      recode(., !!!set_names(as.character(var_select[,2]), var_select$parti_name)))) %>%
+    mutate(across(c("person_1","person_2","person_3","person_4"), 
+                  ~case_when(str_detect(.,"p")~1,
+                             TRUE~NA_real_))) %>% 
+    select(-contains("parti_name_")) %>%
+    mutate(across(contains("gender"), ~case_when(.x=="female"~1,
+                                               .x=="male"~0,
+                                               TRUE~NA_real_))) %>% 
+    rowwise %>% 
+    mutate(network_y=
+             sum(c(person_1_gender, person_2_gender, person_3_gender,person_4_gender), 
+                 na.rm = T)) %>% 
+    mutate(network_know=sum(c(person_1, person_2, person_3,person_4), na.rm = T)) %>% 
+    mutate(network_rate_female=network_y/network_know) %>% 
+    select(parti_name, network_rate_female) 
+   dissertation_data<-merge(dissertation_data,temp_var_df,
+                   by.x = "parti_name", by.y="parti_name", all.x = T, all.y = F)
+   
+}
+
+```
+
+
+Some instances are missing information on market prices. The following code attempts to recover as many of these as possible from  the prices faced by network network members. 
+
+```{r}
+
+dissertation_data<-dissertation_data %>% 
+  mutate(max_price=as.numeric(max_price), 
+         network_mean_max_price=as.numeric(network_mean_max_price)) %>% 
+  mutate(max_price=
+          ifelse(is.na(max_price), network_mean_max_price, max_price)) 
+
+dissertation_data<-dissertation_data %>% 
+    mutate(across(c(person_1, person_2,person_3,person_4),
+     .fns=list(var=~recode(., 
+       !!!set_names(dissertation_data$max_price, dissertation_data$parti_name))))) %>% 
+    mutate(across(c(person_1_var:person_4_var), as.numeric)) %>% 
+    rowwise %>% 
+    mutate(network_mean_price_2=
+            mean(c(person_1_var, person_2_var, person_3_var,person_4_var), na.rm = T)) %>%
+    select(-c(person_1_var, person_2_var, person_3_var,person_4_var)) 
+
+dissertation_data<-dissertation_data %>% 
+  mutate(max_price=as.numeric(max_price), 
+         network_mean_price_2=as.numeric(network_mean_price_2)) %>% 
+  mutate(max_price=
+          ifelse(is.na(max_price), network_mean_price_2, max_price)) 
+
+
+dissertation_data<-dissertation_data %>% 
+    mutate(across(c(person_1, person_2,person_3,person_4),
+     .fns=list(var=~recode(., 
+       !!!set_names(dissertation_data$max_price, dissertation_data$parti_name))))) %>% 
+    mutate(across(c(person_1_var:person_4_var), as.numeric)) %>% 
+    rowwise %>% 
+    mutate(network_mean_price_3=
+            mean(c(person_1_var, person_2_var, person_3_var,person_4_var), na.rm = T)) %>%
+    select(-c(person_1_var, person_2_var, person_3_var,person_4_var)) 
+
+dissertation_data<-dissertation_data %>% 
+  mutate(max_price=as.numeric(max_price), 
+         network_mean_price_3=as.numeric(network_mean_price_3)) %>% 
+  mutate(max_price=
+          ifelse(is.na(max_price), network_mean_price_3, max_price)) 
+
+```
+
+
+In the regressions, squared terms will be used for reasons discussed in the dissertation. These are created hereunder.
+```{r}
+dissertation_data<-dissertation_data %>% 
+  mutate(sq_feed_users=feed_users*feed_users,
+         sq_crossbreed_users=crossbreed_users*crossbreed_users,
+         sq_vaccine_users=vaccine_users*vaccine_users,
+         )
+```
+
+# Writing cleaned csv file 
+The modified dataset is exported.
+```{r}
+write_csv(dissertation_data, "clean_diss_data.csv")
+```
+

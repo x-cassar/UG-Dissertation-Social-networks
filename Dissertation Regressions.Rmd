@@ -1,0 +1,765 @@
+---
+title: "Dissertation Regressions V2"
+author: "B160473"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning=FALSE, error=FALSE, message=FALSE)
+```
+
+# Selecting packages and importing key functions
+
+
+```{r, results='hide'}
+library(tidyverse)
+library(ggplot2)
+library(jtools)
+library(skimr)
+library(performance)
+library(DescTools)
+library(lme4)
+library(flextable)
+library(tinytex)
+library(car)
+library(margins)
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+
+# Importing the dataset
+
+First, the cleaned data generated previously is imported.
+
+```{r}
+clean_dissertation_data <- read_csv("clean_diss_data.csv") %>%   filter(num_cows>0) 
+```
+
+# Data selection 
+Instances where farmers reported having 0 cows were removed for the purposes of regression analysis. Those who named no other farmers as part of their network were also removed. 
+Where data was missing, these were also removed. 
+
+```{r}
+regression_data<-clean_dissertation_data %>% 
+  filter(known_network_members>0) %>% 
+  drop_na(market_distance, max_price, hh_depen, 
+          info_received_media, network_mean_hh_depen) %>% 
+  mutate_if(is.character, as.factor)%>% 
+  column_to_rownames(var="parti_name")
+```
+
+
+# Improved forage 
+
+## Preliminary regression 
+First, the preliminary regression is run.
+
+```{r, results='hide'}
+f0<-glm(
+  data=regression_data  ,
+  family = binomial("logit"),
+  formula=
+      feed_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +num_cows
+      +crossbreed_use #this capture whether farmers own improved breed cattle
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +feed_users
+      +sq_feed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+
+summary(margins(f0))
+# summ_f0<-summ(f0)
+# summ_f0$coeftable<-cbind(summ_f0$coeftable,confint(f0)) 
+```
+
+
+## Robustness checks 
+
+### Linearity of predictors
+
+Logistic regressions assumes that the logit - i.e., the log of the odds ratio - varies linearly with continuous variables. The plot below serves to test this. 
+
+```{r ,results='asis'}
+
+merge(
+  f0$fitted.values %>%as.data.frame() %>% 
+    rowid_to_column() %>% 
+    rename(predicted=2),
+  f0$model %>% 
+    select(where(is.numeric)) %>% 
+    rowid_to_column()
+  ,by = "rowid", all.x = T, all.y = F) %>% 
+  mutate(logit = log(predicted/(1-predicted))) %>%
+  select(-rowid,-predicted) %>% 
+  gather(key = "predictors", value = "predictor.value", -logit) %>% 
+  ggplot()+
+  aes(x=predictor.value, y=logit)+
+  geom_point(size = 0.5, alpha = 0.5) +
+  geom_smooth(method = "loess") + 
+  theme_bw() + 
+  facet_wrap(~predictors, scales = "free_x")
+```
+No significant non linearities appear to be present.
+
+### Residuals
+
+There should also be no relationship between the residuals and predictors. This is tested by "residualPlots" function.
+The "marginalModelPlots" serves to show the relationship between the fitted and actual relationship between predictors and the dependent variable. Results of these plots are not here displayed in the interest of space, but can be displayed by removing the hash (#) and rerunning the code. 
+
+```{r ,results='asis', error=FALSE, fig.width=10,fig.height=11}
+residualPlots(f0, ask=F)
+# marginalModelPlots(f0, ask=F, main="", layout=c(6,4))
+
+```
+
+### High influence points
+
+There should be no extremely influence points when running a logistic regression. The following figures serve to identify any, and what influence they may be having. 
+dfbeta Plots are serve to identify how the estimators would change when each point is excluded from the sample. The results are not shown here in the interest of space. 
+AV (added-variable) plots are also useful at understanding the influence points exhert on estimators, though again, results of these are not shown in the interest of space. Results can easily be visualised by rerunning the code removing the hash (#) below.
+
+```{r ,results='asis', fig.height=6, fig.width=10}
+influenceIndexPlot(f0, id=list(n=5))
+
+influencePlot(f0)
+cooks.distance(f0) %>% 
+  as.data.frame() %>% rownames_to_column() %>% 
+  arrange(desc(.)) %>% 
+  rename(`Cook's distance`=2) %>% 
+  head() 
+
+#avPlots(f0, id.n=4, ask = F)
+# 
+# dfbetaPlots(f0,id.n=4, ask=F)
+```
+
+None of the instances are having a particularly high influence on estimates, thus we can rule out the possibility of influential values biasing results. 
+
+# Improved breed 
+
+## Preliminary regression
+
+
+```{r, results='hide'}
+x0<-glm(
+  data=regression_data  ,
+  family = binomial("logit"),
+  formula=
+      crossbreed_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +crossbreed_users
+      +sq_crossbreed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+
+summary(margins(x0))
+# summ_x0<-summ(x0)
+# summ_x0$coeftable<-cbind(summ_x0$coeftable,confint(x0)) 
+```
+
+
+## Robustness checks 
+
+### Linearity of predictors
+
+
+```{r ,results='asis'}
+
+merge(
+  x0$fitted.values %>%as.data.frame() %>% 
+    rowid_to_column() %>% 
+    rename(predicted=2),
+  x0$model %>% 
+    select(where(is.numeric)) %>% 
+    rowid_to_column()
+  ,by = "rowid", all.x = T, all.y = F) %>% 
+  mutate(logit = log(predicted/(1-predicted))) %>%
+  select(-rowid,-predicted) %>% 
+  gather(key = "predictors", value = "predictor.value", -logit) %>% 
+  ggplot()+
+  aes(x=predictor.value, y=logit)+
+  geom_point(size = 0.5, alpha = 0.5) +
+  geom_smooth(method = "loess") + 
+  theme_bw() + 
+  facet_wrap(~predictors, scales = "free_x")
+```
+
+Many of the relationships are fairly linear, at least for large portions of the distribution.
+
+### Residuals
+
+As above, the "residualPlots" function is used to indicate that there is no relationship between residuals and predictors. The output of "marginalModelPlots" can be displayed by removing the hash (#) and rerunning the code. 
+
+```{r ,results='asis', error=FALSE, fig.width=10,fig.height=11}
+residualPlots(x0, ask=F)
+# marginalModelPlots(x0, ask=F, main="", layout=c(6,4))
+
+```
+No trends are detected, indicating a very good fit. 
+
+
+```{r}
+check_predictions(x0)
+```
+
+The above corroborates the model's very good fit.
+
+### High influence points
+
+The regression is tested for any extremely influential points.
+
+```{r ,results='asis', fig.height=6, fig.width=10}
+influenceIndexPlot(x0, id=list(n=5))
+
+influencePlot(x0)
+cooks.distance(x0) %>% 
+  as.data.frame() %>% rownames_to_column() %>% 
+  arrange(desc(.)) %>% 
+  rename(`Cook's distance`=2) %>% 
+  head() 
+
+#avPlots(x0, id.n=4, ask = F)
+# 
+# dfbetaPlots(x0,id.n=4, ask=F)
+```
+
+All Cook's distance values are very low, raising no concerns regarding influential points. An examination of DFBETAs corroborates this.
+
+
+
+# Vaccination
+
+## Preliminary regression
+
+```{r, results='hide'}
+v0<-glm(
+  data=regression_data  ,
+  family = binomial("logit"),
+  formula=
+      vaccine_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +vaccine_users
+      +sq_vaccine_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+
+summary(margins(v0))
+# summ_v0<-summ(v0)
+# summ_v0$coeftable<-cbind(summ_v0$coeftable,confint(v0)) 
+```
+
+## Robustness checks 
+
+### Linearity of predictors
+
+
+```{r ,results='asis'}
+
+merge(
+  v0$fitted.values %>%as.data.frame() %>% 
+    rowid_to_column() %>% 
+    rename(predicted=2),
+  v0$model %>% 
+    select(where(is.numeric)) %>% 
+    rowid_to_column()
+  ,by = "rowid", all.x = T, all.y = F) %>% 
+  mutate(logit = log(predicted/(1-predicted))) %>%
+  select(-rowid,-predicted) %>% 
+  gather(key = "predictors", value = "predictor.value", -logit) %>% 
+  ggplot()+
+  aes(x=predictor.value, y=logit)+
+  geom_point(size = 0.5, alpha = 0.5) +
+  geom_smooth(method = "loess") + 
+  theme_bw() + 
+  facet_wrap(~predictors, scales = "free_x")
+```
+
+Relations between variables and the log-odds ratio appear to be extremely linear.
+
+```{r}
+check_predictions(v0)
+```
+
+The posterior predictive check above also indicates that the model fits the data well.
+
+### Residuals
+
+```{r ,results='asis', error=FALSE, fig.width=10,fig.height=11}
+residualPlots(v0, ask=F)
+# marginalModelPlots(v0, ask=F, main="", layout=c(6,4))
+
+```
+The results shown that the model is fitting the data very well, save for the variable of max price.
+
+### High influence points
+
+```{r ,results='asis', fig.height=6, fig.width=10}
+influenceIndexPlot(v0, id=list(n=5))
+
+influencePlot(v0)
+cooks.distance(v0) %>% 
+  as.data.frame() %>% rownames_to_column() %>% 
+  arrange(desc(.)) %>% 
+  rename(`Cook's distance`=2) %>% 
+  head() 
+
+#avPlots(v0, id.n=4, ask = F)
+# 
+# dfbetaPlots(v0,id.n=4, ask=F)
+```
+
+The Cook's distance values of instance "op259" is elevated compared to the rest of the sample. The regression is therefore rerun below, excluding this point.
+
+
+## Regression without high influence points
+
+```{r, results='hide'}
+v1<-glm(
+  data=regression_data %>%  rownames_to_column() %>%
+                                filter(rowname%!in%c("op259")) %>%
+                                column_to_rownames("rowname"),
+  family = binomial("logit"),
+  formula=
+      vaccine_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +vaccine_users
+      +sq_vaccine_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+
+summary(margins(v1))
+```
+
+```{r}
+check_predictions(v1)
+```
+
+
+### Comparison of the two regressions
+The two models can be compared easily using functions from the jtools package.
+P-values are shown in brackets in the table. The tails in the figure show confidence intervals, though these are calculated using the Wald test approach, and thus slightly less accurate.
+
+```{r}
+# export_summs(v0, v1, error_format = "({p.value})", error_pos = "right",
+#              model.names = c("v0","v1"))
+plot_summs(v0,v1,
+            model.names = c("v0","v1"))
+```
+
+Most estimates are fairly similar, though the influence of cows owned becomes considerably larger and statistically significant whilst the significance of terms associated with the use of vaccination in networks vanished. 
+
+### Robustness checks
+
+#### High influence points
+
+```{r ,message=FALSE, warning=FALSE, error=FALSE, render="normal print", results='asis', fig.height=6, fig.width=10}
+influenceIndexPlot(v1, id=list(n=5))
+
+influencePlot(v1)
+cooks.distance(v1) %>%
+  as.data.frame() %>% rownames_to_column() %>%
+  arrange(desc(.)) %>%
+  rename(`Cook's distance`=2) %>%
+  head()
+
+#avPlots(v1, id.n=4, ask = F)
+#
+#dfbetaPlots(v1,id.n=4, ask=F)
+
+```
+
+Cook distance values are all very low.
+
+
+# Regressions with instances with at least 50% network known
+
+For some participants, only a small fraction of the named network members were actually surveyed. This means that the influence of some individuals known to form part of their network cannot be captured. For this reason, the regressions are rerun on solely those participants of whom at least half of the named network members have surveyed.
+
+```{r}
+perc50_reg_data<-regression_data %>% filter(prop_network_known>=0.5)
+
+nrow(perc50_reg_data)/nrow(regression_data)
+```
+
+13% of instances are lost, leaving the full sample at 174 instances.
+
+Points showing particularly high Cook's distance values were here also removed using the same procedure shown above (this is not shown in the interest of brevity). Testing of other assumptions was also conducted as above for these regressions, though again these are not shown for brevity.
+
+```{r, results='hide'}
+f2<-glm(
+  data=perc50_reg_data %>% rownames_to_column() %>%
+                                filter(rowname%!in%c("rp110")) %>%
+                                column_to_rownames("rowname"),
+  family = binomial("logit"),
+  formula=
+      feed_use~
+            age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +num_cows
+      +crossbreed_use
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +feed_users
+      +sq_feed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+
+summary(margins(f2))
+```
+
+```{r}
+x2<-glm(
+  data=perc50_reg_data  ,
+  family = binomial("logit"),
+  formula=
+      crossbreed_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +crossbreed_users
+      +sq_crossbreed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+
+summary(margins(x2))
+```
+
+```{r}
+v2<-glm(
+  data=perc50_reg_data %>% rownames_to_column() %>%
+                                filter(rowname%!in%c("op259")) %>%
+                                column_to_rownames("rowname") ,
+  family = binomial("logit"),
+  formula=
+      vaccine_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +vaccine_users
+      +sq_vaccine_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+
+summary(margins(v2)) 
+```
+
+
+
+# Running regression with respondents who are decision makers
+
+Some survey participants were not the main decision maker in the household. To check for robustness of results, the regressions are rerun including only respondents who are decision makers on dairying within the household.
+As above, appropriate tests were conducted, but these are not shown for brevity.
+
+```{r ,results='hide'}
+
+f3<-glm(formula=
+      feed_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +num_cows
+      +crossbreed_use
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +feed_users
+      +sq_feed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+    ,data=regression_data %>%  filter(decision_maker==T)
+    , family = binomial("logit"))
+
+x3<-glm(formula=
+         crossbreed_use~
+        age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +crossbreed_users
+      +sq_crossbreed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+       ,data=regression_data %>%  filter(decision_maker==T)
+       ,family = binomial("logit"))
+
+v3<-glm(formula =
+          vaccine_use ~
+          age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +vaccine_users
+      +sq_vaccine_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+        ,family=binomial(link = "logit")
+        ,data =regression_data%>% rownames_to_column() %>%
+                                filter(rowname%!in%c("op259")) %>%
+                                column_to_rownames("rowname")
+        )
+
+```
+
+# Regressions excluding Siaya  
+
+For reasons discussed in the dissertation, all three regressions are rerun excluding instances from Siaya.
+
+Again, high influence points are removed and appropriate assumption tests conducted.
+
+```{r}
+x_no_s<-(glm(
+  data=regression_data %>% mutate(site=as.character(site)) %>% filter(site!="Siaya"),
+  family = binomial("logit"),
+  formula=
+    crossbreed_use~
+    age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +crossbreed_users
+      +sq_crossbreed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+))
+
+v_no_s<-(glm(
+  data=regression_data%>% mutate(site=as.character(site)) %>% filter(site!="Siaya")%>%  
+                                rownames_to_column() %>%
+                                filter(rowname%!in%c("op259")) %>%
+                                column_to_rownames("rowname"),
+  family = binomial("logit"),
+  formula=
+    vaccine_use~
+    age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +vaccine_users
+      +sq_vaccine_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+))
+
+f_no_s<-(glm(
+  data=regression_data %>% mutate(site=as.character(site)) %>% filter(site!="Siaya"),
+  family = binomial("logit"),
+  formula=
+    feed_use~
+    age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +num_cows
+      +crossbreed_use
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +feed_users
+      +sq_feed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+))
+
+```
+
+

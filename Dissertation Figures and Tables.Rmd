@@ -1,0 +1,2036 @@
+---
+title: "Dissertation Figures and Tables"
+author: "B160473"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning=FALSE, error=FALSE, message=FALSE)
+```
+
+# Selecting packages and importing key functions
+
+
+```{r, results='hide'}
+library(tidyverse)
+library(ggplot2)
+library(jtools)
+library(skimr)
+library(performance)
+library(DescTools)
+library(huxtable)
+library(margins)
+library(pROC)
+library(ggpubr)
+library(ggthemes)
+library(ggpattern)
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+
+# Importing the dataset
+
+First, the cleaned data generated previously is imported.
+
+```{r}
+clean_dissertation_data <- read_csv("clean_diss_data.csv") %>% 
+    filter(num_cows>0) 
+
+regression_data<-clean_dissertation_data %>% 
+  filter(known_network_members>0) %>% 
+  drop_na(market_distance, max_price, hh_depen, 
+          info_received_media, network_mean_hh_depen) %>% 
+  mutate_if(is.character, as.factor)%>% 
+  column_to_rownames(var="parti_name")
+```
+
+# Tables
+
+## Table 4
+
+```{r}
+tab4<-
+  rbind(
+  clean_dissertation_data %>% 
+  group_by(site) %>% 
+  summarise(n=n(),
+             `Improved breed use rate`=mean(crossbreed_use, na.rm=T),
+             `Improved forage use rate`=mean(feed_use, na.rm=T),
+            `Vaccine use rate`=mean(vaccine_use, na.rm=T)) 
+  ,
+  c("Pooled",nrow(clean_dissertation_data),
+    mean(clean_dissertation_data$crossbreed_use,na.rm = T),
+    mean(clean_dissertation_data$feed_use,na.rm = T),
+    mean(clean_dissertation_data$vaccine_use,na.rm = T))
+  ) %>% 
+  as.data.frame() %>%
+  mutate(across(c(2:5), ~as.numeric(.))) %>% 
+  rowwise() %>%
+  mutate(`Average rate of technology use`=
+  mean(c(`Improved breed use rate`,`Improved forage use rate`,`Vaccine use rate`))) %>% 
+  as_huxtable()
+
+
+quick_xlsx(tab4,file="tabxxx.xlsx")
+```
+
+## Table 5
+```{r}
+tab5<-rbind(
+clean_dissertation_data %>% 
+  mutate(l_per_cow=(amount_milk/num_cows)/7,
+         perc_sold=100-con_personal) %>% 
+  mutate(across(c(parti_gender, decision_maker_gender), ~ifelse(.=="male",1,0))) %>% 
+    mutate(val=1) %>%
+  pivot_wider(names_from = education, values_from = val) %>%
+  mutate(across(c(none, primary, above_primary), ~ifelse(is.na(.),0,.))) %>%
+  mutate(val=1) %>%
+  pivot_wider(names_from = farm_size, values_from = val) %>%
+  mutate(across(c("0_0.5", "0.6_2.5", "greater_2.6"), ~ifelse(is.na(.),0,.))) %>%
+mutate(across(c(none, primary, above_primary,"0_0.5", "0.6_2.5", "greater_2.6"), as.numeric)) %>% 
+  select(site,
+         parti_gender,decision_maker_gender,
+    age, farming_years, hh_depen,
+    mobile_access,
+    none,primary, above_primary,
+    "0_0.5", "0.6_2.5", "greater_2.6",
+    num_cows,l_per_cow,
+    perc_dairy,
+    perc_sold
+    ) %>% 
+  pivot_longer(-site) 
+,
+clean_dissertation_data %>% 
+  mutate(l_per_cow=(amount_milk/num_cows)/7,
+         perc_sold=100-con_personal) %>% 
+  mutate(across(c(parti_gender, decision_maker_gender), ~ifelse(.=="male",1,0))) %>% 
+    mutate(val=1) %>%
+  pivot_wider(names_from = education, values_from = val) %>%
+  mutate(across(c(none, primary, above_primary), ~ifelse(is.na(.),0,.))) %>%
+  mutate(val=1) %>%
+  pivot_wider(names_from = farm_size, values_from = val) %>%
+  mutate(across(c("0_0.5", "0.6_2.5", "greater_2.6"), ~ifelse(is.na(.),0,.))) %>%
+mutate(across(c(none, primary, above_primary,"0_0.5", "0.6_2.5", "greater_2.6"), as.numeric)) %>% 
+  select(site,
+         parti_gender,decision_maker_gender,
+         age, farming_years, hh_depen,
+         mobile_access,
+         none,primary, above_primary,
+    "0_0.5", "0.6_2.5", "greater_2.6",
+         num_cows,l_per_cow,
+         perc_dairy,
+         perc_sold
+  ) %>% 
+  pivot_longer(-site) %>% 
+  mutate(site="Pooled")
+) %>% 
+  group_by(name,site) %>% 
+summarise(mean= mean(value,na.rm=T), sd= sd(value, na.rm=T)) %>% 
+  mutate(stats=ifelse(str_detect(name, "gender|primary|none|0|2.6|mobile"), paste0(100*mean),  paste0(mean," (",sd,")"))) %>% 
+  select(name, site, stats) %>% 
+  pivot_wider(names_from = site, values_from = stats) %>% 
+  select(name, Pooled, everything()) %>% 
+  ungroup() %>% 
+  # mutate(across(c(2:6), as.numeric)) %>% 
+  mutate(name=fct_recode(name,
+                         "Participant gender (1=male)"="parti_gender",
+                "Decisionmaker gender (1=male)"="decision_maker_gender",
+                "Age (years)"="age",
+                "Dairy farming experience (years)"="farming_years",
+                "Economic Dependents (#)"="hh_depen",
+                "Mobile phone access (1=yes)"="mobile_access",
+                "Education: None"="none",
+               "Education: Primary"="primary",
+               "Education: Above primary"="above_primary",
+               "Decisionmaker gender (1=male)"="decision_maker_gendermale",
+                "Cows owned (#)"="num_cows",
+                "Milk output per cow (L/day)"="l_per_cow",
+                "Proportion of income from dairy (%)"="perc_dairy",
+                "Proportion of milk produced sold (%)"="perc_sold",
+                "Farm size: 0-0.5ac"="0_0.5",
+                "Farm size: 2.5-2.5ac"="0.6_2.5",
+                 "Farm size: >2.5ac"="greater_2.6")) %>% 
+    mutate(name=factor(name, ordered = T, levels=c("Participant gender (1=male)",
+                                                   "Decisionmaker gender (1=male)",
+                                                   "Age (years)",
+                                                   "Dairy farming experience (years)",
+                                                   "Economic Dependents (#)",
+                                                   "Mobile phone access (1=yes)",
+                                                   "Education: None",
+                                                   "Education: Primary",
+                                                   "Education: Above primary",
+                                                   "Farm size: 0-0.5ac",
+                                                    "Farm size: 2.5-2.5ac",
+                                                     "Farm size: >2.5ac",
+                                                   "Cows owned (#)",
+                                                   "Milk output per cow (L/day)",
+                                                   "Proportion of income from dairy (%)",
+                                                   "Proportion of milk produced sold (%)"))) %>% 
+  arrange(name) %>%
+  as_huxtable()
+
+number_format(tab5)[c(2:17),c(2:6)] <- "%5.1f"
+quick_xlsx(tab5, file="tab5.xlsx")
+```
+
+## Table 6
+
+```{r}
+tab6<-rbind(
+rbind(
+clean_dissertation_data %>% 
+  mutate(cross_known=ifelse(crossbreed_users>0,T,F),
+         feed_known=ifelse(feed_users>0,T,F),
+         vax_known=ifelse(vaccine_users>0, T, F)) 
+, 
+clean_dissertation_data %>% 
+  mutate(cross_known=ifelse(crossbreed_users>0,T,F),
+         feed_known=ifelse(feed_users>0,T,F),
+         vax_known=ifelse(vaccine_users>0, T, F)) %>% 
+  mutate(site="Pooled")
+) %>% 
+  group_by(site) %>% 
+  summarise(`Improved breed`=mean(cross_known, na.rm=T),
+            `Improved forage`=mean(feed_known, na.rm=T),
+            `Vaccination`=mean(vax_known, na.rm=T)) %>% 
+  arrange(match(site, c("Oyugis","Rongo","Siaya","Vihiga","Pooled")))
+,
+rbind(
+  clean_dissertation_data 
+  , 
+  clean_dissertation_data %>%
+    mutate(site="Pooled")
+) %>%  
+  group_by(site) %>% 
+  summarise(`Improved breed`=mean(crossbreed_users, na.rm=T),
+            `Improved forage`=mean(feed_users, na.rm=T),
+            `Vaccination`=mean(vaccine_users, na.rm=T)) %>% 
+  arrange(match(site, c("Oyugis","Rongo","Siaya","Vihiga","Pooled")))
+) %>% 
+  as_huxtable()
+
+quick_xlsx(tab6, file="tab6.xlsx")
+```
+
+
+
+## Table 7 
+
+```{r}
+tab7a<-clean_dissertation_data %>% 
+  mutate(across(c(person_1,person_2, person_3, person_4), ~ifelse(str_detect(.,"x"),NA,.))) %>% 
+  mutate(across(c(person_1,person_2, person_3, person_4), ~recode(., !!!set_names(clean_dissertation_data$education,
+                                                                                 clean_dissertation_data$parti_name)))) %>% 
+  select(parti_name, education, person_1,person_2, person_3, person_4) %>% 
+  mutate(across(c(education,person_1,person_2, person_3, person_4), ~ifelse(.%in%c("none","primary","above_primary"),.,NA))) %>% 
+  pivot_longer(cols=c(person_1,person_2, person_3, person_4), names_to = "p",values_to = "v") %>% 
+  drop_na(v) %>% 
+  group_by(education) %>% 
+  count(v) %>% 
+  as.data.frame() %>% 
+  pivot_wider(names_from = v, values_from = n) %>% 
+  select(education, none, primary, above_primary) %>% 
+  arrange(match(education, c("none","primary","above_primary"))) %>% 
+  rowwise() %>% 
+  mutate(across(c(2:4),~./(none+primary+above_primary)))
+
+tab7b<-clean_dissertation_data %>% 
+  mutate(across(c(person_1,person_2, person_3, person_4), ~ifelse(str_detect(.,"x"),NA,.))) %>% 
+  mutate(across(c(person_1,person_2, person_3, person_4), ~recode(., !!!set_names(clean_dissertation_data$farm_size,
+                                                                          clean_dissertation_data$parti_name)))) %>%
+  select(parti_name, farm_size, person_1,person_2, person_3, person_4) %>% 
+  mutate(across(c(farm_size,person_1,person_2, person_3, person_4), 
+                ~ifelse(.%in%c("0_0.5","0.6_2.5","greater_2.6"),.,NA))) %>%
+  pivot_longer(cols=c(person_1,person_2, person_3, person_4), names_to = "p",values_to = "v") %>% 
+  drop_na(v) %>% 
+  group_by(farm_size) %>% 
+  count(v) %>% 
+  as.data.frame() %>% 
+  pivot_wider(names_from = v, values_from = n) %>% 
+  select(farm_size, "0_0.5","0.6_2.5","greater_2.6") %>% 
+  arrange(match(farm_size, c("0_0.5","0.6_2.5","greater_2.6"))) %>% 
+  rowwise() %>% 
+  mutate(across(c(2:4),~./(`0_0.5`+`0.6_2.5`+`greater_2.6`)))
+
+
+tab7c<-clean_dissertation_data %>% 
+  mutate(across(c(person_1,person_2, person_3, person_4), ~ifelse(str_detect(.,"x"),NA,.))) %>% 
+  mutate(across(c(person_1,person_2, person_3, person_4), 
+                ~recode(., !!!set_names(clean_dissertation_data$decision_maker_gender,
+                                        clean_dissertation_data$parti_name)))) %>% 
+  select(parti_name, decision_maker_gender, person_1,person_2, person_3, person_4) %>% 
+  mutate(across(c(decision_maker_gender,person_1,person_2, person_3, person_4), 
+                ~ifelse(.%in%c("male","female"),.,NA))) %>% 
+  pivot_longer(cols=c(person_1,person_2, person_3, person_4), names_to = "p",values_to = "v") %>% 
+  drop_na(v) %>% 
+  group_by(decision_maker_gender) %>% 
+  count(v) %>% 
+  as.data.frame() %>% 
+  pivot_wider(names_from = v, values_from = n) %>% 
+  mutate(across(c(2:3), ~./(female+male)))
+
+quick_xlsx(tab7a, file="tab7a.xlsx")
+quick_xlsx(tab7b, file="tab7b.xlsx")
+quick_xlsx(tab7c, file="tab7c.xlsx")
+```
+
+
+## Table 8
+
+```{r}
+tab8<-regression_data %>% 
+  mutate(decision_maker_gender=ifelse(decision_maker_gender=="male",1,0)) %>% 
+  select(crossbreed_use, feed_use, vaccine_use
+      ,age
+      ,education
+      ,decision_maker_gender
+      ,hh_depen
+      ,farm_size
+      ,num_cows
+      ,group_member
+      ,network_members
+      ,max_price
+      ,market_distance
+      ,info_received_media
+      ,info_received_lead
+      ,info_received_coop
+      ,info_received_gov
+      ,info_received_ext_other
+      ,crossbreed_users,
+      ,feed_users
+      ,vaccine_users
+      ,network_mean_age
+      ,network_mean_education_cont
+      ,network_mean_hh_depen
+      ,network_mean_farm_size_cont
+      ,network_mean_num_cows
+      ,site
+) %>% 
+  mutate_if(is.logical, as.numeric) %>% 
+  select(is.numeric) %>% 
+  skim() %>% 
+  as.data.frame() %>%
+  select(skim_variable,numeric.mean,numeric.sd, numeric.p0, numeric.p100) %>% 
+  rename("Variable"=1,
+         "Mean"=2,
+         "S.D."=3,
+         "Min."=4,
+         "Max."=5) %>% 
+  mutate(Variable=c("Improved breed use (yes=1)",
+                    "Improved forage use (yes=1)",
+                    "Vaccination use (yes=1)",
+                    "Age (years)",
+                    "Decisionmaker gender (1=male)",
+                   "Economic Dependents (#)",
+                   "Cows owned (#)",
+                    "Group membership (yes=1)",
+                            "Named network members (#)",
+                            "Milk selling price (KES)",
+                            "Market Distance (km)",
+                            "Info. received: Government",
+                            "Info. received: Other extension",
+                            "Info. received: Lead farmer",
+                            "Info. received: Coop",
+                            "Info. received: Media",
+                    "Improv. breed users (#)",
+                          "Improv. forage users (#)",
+                          "Vaccine users (#)",
+                           "Network mean age (years)",
+                           "Network mean education attianment†",
+                          "Network mean economic dependents (#)",
+                          "Network mean farm size^",
+                          "Network mean cows owned (#)")) %>% 
+  as_huxtable()
+
+quick_xlsx(tab8, file="tab8.xlsx")
+```
+
+
+## Table 9
+
+```{r}
+f0<-glm(
+  data=regression_data  ,
+  family = binomial("logit"),
+  formula=
+      feed_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +num_cows
+      +crossbreed_use
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +feed_users
+      +sq_feed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+x0<-glm(
+  data=regression_data  ,
+  family = binomial("logit"),
+  formula=
+      crossbreed_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +crossbreed_users
+      +sq_crossbreed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+v1<-glm(
+  data=regression_data %>%  rownames_to_column() %>%
+                                filter(rowname%!in%c("op259")) %>%
+                                column_to_rownames("rowname"),
+  family = binomial("logit"),
+  formula=
+      vaccine_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +vaccine_users
+      +sq_vaccine_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+
+x0R2<-as.character(as.numeric(PseudoR2(x0, which="McFadden")))
+f0R2<-as.character(as.numeric(PseudoR2(f0, which="McFadden")))
+v1R2<-as.character(as.numeric(PseudoR2(v1, which="McFadden")))
+
+x0auc<-as.character(as.numeric(auc(roc(x0$y, x0$fitted.values))))
+f0auc<-as.character(as.numeric(auc(roc(f0$y, f0$fitted.values))))
+v1auc<-as.character(as.numeric(auc(roc(v1$y, v1$fitted.values))))
+
+full_regression<-export_summs(margins(x0),margins(f0),margins(v1), error_format = "{std.error}",error_pos = "right",
+                   statistics = c(N="df.null", `Log Likelihood`="logLik","BIC","AIC"),
+                   stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,`°`=0.1),
+                   coefs=c("Age (years)"="age",
+                           "Education: None"="educationnone",
+                           "Education: Primary"="educationprimary",
+                           "Decisionmaker gender (1=male)"="decision_maker_gendermale",
+                           "Economic Dependents (#)"="hh_depen",
+                           "Farm size: 0-0.5ac"="farm_size0_0.5",
+                           "Farm size: >2.5ac"="farm_sizegreater_2.6",
+                           "Cows owned (#)"="num_cows",
+                           "Improved breed cattle (1=yes)"="crossbreed_use",
+                           "Group membership (yes=1)"="group_member",
+                           "Named network members (#)"="network_members",
+                           "Selling price (KES)"="max_price",
+                           "Market Distance (km)"="market_distance",
+                           "Info. received: Government"="info_received_gov",
+                           "Info. received: Other extension"=
+                             "info_received_ext_other",
+                           "Info. received: Lead farmer"= 
+                             "info_received_lead",
+                           "Info. received: Coop"="info_received_coop",
+                           "Info. received: Media"="info_received_media",
+                           "Site: Rongo"="siteRongo",
+                           "Site: Siaya"="siteSiaya",
+                           "Site: Vihiga"="siteVihiga",
+                           "Improv. breed users (#)"="crossbreed_users",
+                           "Square of improv. breed users"="sq_crossbreed_users",
+                           "Improv. forage users (#)"="feed_users",
+                           "Square of improv. forage users"="sq_feed_users",
+                           "Vaccine users (#)"="vaccine_users",
+                           "Square of vaccine users"="sq_vaccine_users",
+                           "Network mean age (years)"="network_mean_age",
+                           "Network mean education attianment†"=
+                             "network_mean_education_cont",
+                           "Network mean economic dependents (#)"="network_mean_hh_depen",
+                           "Network mean farm size^"="network_mean_farm_size_cont",
+                           "Network mean cows owned (#)"="network_mean_num_cows"
+                   )
+)
+
+full_reg_mod<-full_regression %>% 
+  as.data.frame() %>% 
+  rename(x0=2,x0e=3, f0=4, f0e=5, v1=6,v1e=7) %>% 
+  mutate(names=ifelse(names=="BIC", "McFadden P.R2",names),
+         names=ifelse(names=="AIC", "AUC",names)) %>% 
+  mutate(across(c(2:7),
+                ~ifelse(str_detect(.,"Model|p < 0.001"),NA, .))) %>% 
+  separate(x0, into = c("xvalue","xsig"), sep = " ") %>% 
+  separate(f0, into = c("fvalue","fsig"), sep = " ")  %>% 
+  separate(v1, into = c("vvalue","vsig"), sep = " ")  %>%
+  mutate(across(c(contains("value"),x0e,f0e,v1e),~as.numeric(.))) %>% 
+  mutate(across(c(contains("value"),x0e,f0e,v1e),~ifelse(.<1,.*100,.))) %>% 
+  mutate(across(c(contains("value"),x0e,f0e,v1e),~ifelse(names=="N",.+1,.))) %>%   
+  unite("xvalues", c(xvalue,xsig), sep = " ", na.rm=T) %>% 
+  unite("fvalues", c(fvalue,fsig), sep = " ", na.rm=T) %>%   
+  unite("vvalues", c(vvalue,vsig), sep = " ", na.rm=T) %>% 
+  mutate(xvalues=ifelse(names=="McFadden P.R2", x0R2,xvalues),
+         fvalues=ifelse(names=="McFadden P.R2", f0R2,fvalues),
+         vvalues=ifelse(names=="McFadden P.R2", v1R2,vvalues)) %>% 
+  mutate(xvalues=ifelse(names=="AUC", x0auc,xvalues),
+         fvalues=ifelse(names=="AUC", f0auc,fvalues),
+         vvalues=ifelse(names=="AUC", v1auc,vvalues)) %>% 
+  mutate(names=ifelse(names==""&xvalues==""&fvalues==""&vvalues=="", 
+                      "Variable",names)) %>% 
+  mutate(across(c(x0e,f0e,v1e), ~ifelse(str_length(.)>2,paste0("(",.,")"),.))) %>% 
+  mutate(xvalues=ifelse(names=="Variable","Improved breed", xvalues),
+         fvalues=ifelse(names=="Variable","Improved forage", fvalues),
+         vvalues=ifelse(names=="Variable","Vaccination", vvalues))  
+
+full_regression$names<-as.list(full_reg_mod)$names
+full_regression$`Model 1`<-as.list(full_reg_mod)$xvalues
+full_regression$`Model 2`<-as.list(full_reg_mod)$fvalues
+full_regression$`Model 3`<-as.list(full_reg_mod)$vvalues
+full_regression$`Model 1.error`<-as.list(full_reg_mod)$x0e
+full_regression$`Model 2.error`<-as.list(full_reg_mod)$f0e
+full_regression$`Model 3.error`<-as.list(full_reg_mod)$v1e
+number_format(full_regression)[34, c(2:6)] <- fmt_pretty()
+
+
+
+quick_xlsx(full_regression, file="full_regression.xlsx")
+
+```
+
+## Table 10
+```{r}
+perc50_reg_data<-regression_data %>% 
+  filter(prop_network_known>=0.5)
+
+f2<-glm(
+  data=perc50_reg_data %>% rownames_to_column() %>%
+                                filter(rowname%!in%c("rp110")) %>%
+                                column_to_rownames("rowname"),
+  family = binomial("logit"),
+  formula=
+      feed_use~
+            age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +num_cows
+      +crossbreed_use
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +feed_users
+      +sq_feed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+
+x2<-glm(
+  data=perc50_reg_data  ,
+  family = binomial("logit"),
+  formula=
+      crossbreed_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +crossbreed_users
+      +sq_crossbreed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+v2<-glm(
+  data=perc50_reg_data%>%  rownames_to_column() %>%
+                                filter(rowname%!in%c("op259")) %>%
+                                column_to_rownames("rowname")  ,
+  family = binomial("logit"),
+  formula=
+      vaccine_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +vaccine_users
+      +sq_vaccine_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+  )
+
+
+x2R2<-as.character(as.numeric(PseudoR2(x2, which="McFadden")))
+f2R2<-as.character(as.numeric(PseudoR2(f2, which="McFadden")))
+v2R2<-as.character(as.numeric(PseudoR2(v2, which="McFadden")))
+
+x2auc<-as.character(as.numeric(auc(roc(x2$y, x2$fitted.values))))
+f2auc<-as.character(as.numeric(auc(roc(f2$y, f2$fitted.values))))
+v2auc<-as.character(as.numeric(auc(roc(v2$y, v2$fitted.values))))
+
+perc50_regressions<-export_summs(margins(x2),margins(f2),margins(v2), error_format = "{std.error}",error_pos = "right",
+                   statistics = c(N="df.null", `Log Likelihood`="logLik","BIC","AIC"),
+                   stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,`°`=0.1),
+                   coefs=c("Age (years)"="age",
+                           "Education: None"="educationnone",
+                           "Education: Primary"="educationprimary",
+                           "Decisionmaker gender (1=male)"="decision_maker_gendermale",
+                           "Economic Dependents (#)"="hh_depen",
+                           "Farm size: 0-0.5ac"="farm_size0_0.5",
+                           "Farm size: >2.5ac"="farm_sizegreater_2.6",
+                           "Cows owned (#)"="num_cows",
+                           "Improved breed cattle (1=yes)"="crossbreed_use",
+                           "Group membership (yes=1)"="group_member",
+                           "Named network members (#)"="network_members",
+                           "Selling price (KES)"="max_price",
+                           "Market Distance (km)"="market_distance",
+                           "Info. received: Government"="info_received_gov",
+                           "Info. received: Other extension"=
+                             "info_received_ext_other",
+                           "Info. received: Lead farmer"= 
+                             "info_received_lead",
+                           "Info. received: Coop"="info_received_coop",
+                           "Info. received: Media"="info_received_media",
+                           "Site: Rongo"="siteRongo",
+                           "Site: Siaya"="siteSiaya",
+                           "Site: Vihiga"="siteVihiga",
+                           "Improv. breed users (#)"="crossbreed_users",
+                           "Square of improv. breed users"="sq_crossbreed_users",
+                           "Improv. forage users (#)"="feed_users",
+                           "Square of improv. forage users"="sq_feed_users",
+                           "Vaccine users (#)"="vaccine_users",
+                           "Square of vaccine users"="sq_vaccine_users",
+                           "Network mean age (years)"="network_mean_age",
+                           "Network mean education attianment†"=
+                             "network_mean_education_cont",
+                           "Network mean economic dependents (#)"="network_mean_hh_depen",
+                           "Network mean farm size^"="network_mean_farm_size_cont",
+                           "Network mean cows owned (#)"="network_mean_num_cows"
+                   )
+)
+
+perc50_reg_mod<-perc50_regressions %>% 
+  as.data.frame() %>% 
+  rename(x2=2,x2e=3, f2=4, f2e=5, v2=6,v2e=7) %>% 
+  mutate(names=ifelse(names=="BIC", "McFadden P.R2",names),
+         names=ifelse(names=="AIC", "AUC",names)) %>% 
+  mutate(across(c(2:7),
+                ~ifelse(str_detect(.,"Model|p < 0.001"),NA, .))) %>% 
+  separate(x2, into = c("xvalue","xsig"), sep = " ") %>% 
+  separate(f2, into = c("fvalue","fsig"), sep = " ")  %>% 
+  separate(v2, into = c("vvalue","vsig"), sep = " ")  %>%
+  mutate(across(c(contains("value"),x2e,f2e,v2e),~as.numeric(.))) %>% 
+  mutate(across(c(contains("value"),x2e,f2e,v2e),~ifelse(.<1,.*100,.))) %>% 
+  mutate(across(c(contains("value"),x2e,f2e,v2e),~ifelse(names=="N",.+1,.))) %>%   
+  unite("xvalues", c(xvalue,xsig), sep = " ", na.rm=T) %>% 
+  unite("fvalues", c(fvalue,fsig), sep = " ", na.rm=T) %>%   
+  unite("vvalues", c(vvalue,vsig), sep = " ", na.rm=T) %>% 
+  mutate(xvalues=ifelse(names=="McFadden P.R2", x2R2,xvalues),
+         fvalues=ifelse(names=="McFadden P.R2", f2R2,fvalues),
+         vvalues=ifelse(names=="McFadden P.R2", v2R2,vvalues)) %>% 
+  mutate(xvalues=ifelse(names=="AUC", x2auc,xvalues),
+         fvalues=ifelse(names=="AUC", f2auc,fvalues),
+         vvalues=ifelse(names=="AUC", v2auc,vvalues)) %>% 
+  mutate(names=ifelse(names==""&xvalues==""&fvalues==""&vvalues=="", 
+                      "Variable",names)) %>% 
+  mutate(across(c(x2e,f2e,v2e), ~ifelse(str_length(.)>2,paste0("(",.,")"),.))) %>% 
+  mutate(xvalues=ifelse(names=="Variable","Improved breed", xvalues),
+         fvalues=ifelse(names=="Variable","Improved forage", fvalues),
+         vvalues=ifelse(names=="Variable","Vaccination", vvalues))  
+
+perc50_regressions$names<-as.list(perc50_reg_mod)$names
+perc50_regressions$`Model 1`<-as.list(perc50_reg_mod)$xvalues
+perc50_regressions$`Model 2`<-as.list(perc50_reg_mod)$fvalues
+perc50_regressions$`Model 3`<-as.list(perc50_reg_mod)$vvalues
+perc50_regressions$`Model 1.error`<-as.list(perc50_reg_mod)$x2e
+perc50_regressions$`Model 2.error`<-as.list(perc50_reg_mod)$f2e
+perc50_regressions$`Model 3.error`<-as.list(perc50_reg_mod)$v2e
+number_format(perc50_regressions)[34, c(2:6)] <- fmt_pretty()
+
+
+quick_xlsx(perc50_regressions, file="perc50_regressions.xlsx")
+
+```
+
+## Table of extension 
+
+```{r}
+tab11<-clean_dissertation_data %>% 
+  drop_na(feed_use, vaccine_use, crossbreed_use) %>% 
+filter(info_received_gov==F&info_received_ext_other==F) %>% 
+  mutate(info_source_ext=ifelse(info_source_gov==T|info_source_ext_other==T,T,F)) %>% 
+group_by(info_source_ext) %>%
+skim(crossbreed_use, feed_use, vaccine_use)%>% 
+as.data.frame() %>%
+drop_na(info_source_ext) %>% 
+mutate(info_source_ext2=ifelse(info_source_ext==F, 
+                               paste0(info_source_ext," (",nrow(clean_dissertation_data %>%
+                                                                  drop_na(feed_use, vaccine_use, crossbreed_use) %>% 
+filter(info_received_gov==F&info_received_ext_other==F) %>% 
+  mutate(info_source_ext=ifelse(info_source_gov==T|info_source_ext_other==T,T,F)) %>% 
+  filter(info_source_ext==F))-n_missing,")"),
+paste0(info_source_ext," (",nrow(clean_dissertation_data %>%
+                                   drop_na(feed_use, vaccine_use, crossbreed_use) %>% 
+filter(info_received_gov==F&info_received_ext_other==F) %>% 
+  mutate(info_source_ext=ifelse(info_source_gov==T|info_source_ext_other==T,T,F)) %>% 
+  filter(info_source_ext==T))-n_missing,")")
+)) %>% 
+select(skim_variable, info_source_ext2, logical.mean) %>% 
+pivot_wider(names_from = info_source_ext2, values_from = logical.mean)  %>% 
+  mutate(skim_variable=c("Rate of improve breed use",
+                         "Rate of improved forage use",
+                         "Rate of vaccination use")) %>% 
+  mutate(across(c(2:3),~scales::percent(.))) %>% 
+  rename("Would you seek an extensionist for information?"=1,
+         "No (n=129)"=2,
+         "Yes (n=23)"=3) %>%
+  as_huxtable()
+
+quick_pptx(tab11, file="tab11.pptx")
+
+```
+
+
+## Supplementary Table 1
+
+```{r}
+library(car)
+stab1<-rbind(
+vif(x0)[,3] %>% 
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  mutate(reg="x")
+,
+vif(f0)[,3] %>% 
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  mutate(reg="f")
+,
+vif(v1)[,3] %>% 
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  mutate(reg="v")
+) %>% 
+  pivot_wider(names_from = "reg", values_from = ".") %>% 
+mutate(rowname=fct_recode(rowname,  
+  "Age (years)"="age",
+"Education"="education",
+"Decisionmaker gender"="decision_maker_gender",
+"Economic Dependents (#)"="hh_depen",
+"Farm size"="farm_size",
+"Cows owned (#)"="num_cows",
+"Improved breed cattle (1=yes)"="crossbreed_use",
+"Group membership (yes=1)"="group_member",
+"Named network members (#)"="network_members",
+"Selling price (KES)"="max_price",
+"Market Distance (km)"="market_distance",
+"Info. received: Government"="info_received_gov",
+"Info. received: Other extension"=
+  "info_received_ext_other",
+"Info. received: Lead farmer"= 
+  "info_received_lead",
+"Info. received: Coop"="info_received_coop",
+"Info. received: Media"="info_received_media",
+"Site"="site",
+"Improv. breed users (#)"="crossbreed_users",
+"Square of improv. breed users"="sq_crossbreed_users",
+"Improv. forage users (#)"="feed_users",
+"Square of improv. forage users"="sq_feed_users",
+"Vaccine users (#)"="vaccine_users",
+"Square of vaccine users"="sq_vaccine_users",
+"Network mean age (years)"="network_mean_age",
+"Network mean education attianment†"=
+  "network_mean_education_cont",
+"Network mean economic dependents (#)"="network_mean_hh_depen",
+"Network mean farm size^"="network_mean_farm_size_cont",
+"Network mean cows owned (#)"="network_mean_num_cows"
+)) %>% 
+  arrange(match(rowname, c("Age (years)",
+                                    "Education",
+                                    "Decisionmaker gender",
+                                    "Economic Dependents (#)",
+                                    "Farm size",
+                                    "Cows owned (#)",
+                                    "Improved breed cattle (1=yes)",
+                                    "Group membership (yes=1)",
+                                    "Named network members (#)",
+                                    "Selling price (KES)",
+                                    "Market Distance (km)",
+                                    "Info. received: Government",
+                                    "Info. received: Other extension",
+                                    "Info. received: Lead farmer",
+                                    "Info. received: Coop",
+                                    "Info. received: Media",
+                                    "Site",
+                                    "Improv. breed users (#)",
+                                    "Square of improv. breed users",
+                                    "Improv. forage users (#)",
+                                    "Square of improv. forage users",
+                                    "Vaccine users (#)",
+                                    "Square of vaccine users",
+                                    "Network mean age (years)",
+                                    "Network mean education attianment†",
+                                    "Network mean economic dependents (#)",
+                                    "Network mean farm size^",
+                                    "Network mean cows owned (#)"))) %>%
+  rename("Improved Breed reg."=2, 
+         "Improved Forage reg."=3,
+         "Vaccination reg."=4,
+         "Variable"=1) %>% 
+  as_huxtable()
+
+quick_xlsx(stab1, file="stab1.xlsx")
+```
+
+## Supplementary Table 2
+```{r}
+stab2<-
+rbind(  
+  perc50_reg_data %>% 
+  mutate(decision_maker_gender=ifelse(decision_maker_gender=="male",1,0)) %>% 
+  select(crossbreed_use, feed_use, vaccine_use
+      ,age
+      ,education
+      ,decision_maker_gender
+      ,hh_depen
+      ,farm_size
+      ,num_cows
+      ,group_member
+      ,network_members
+      ,max_price
+      ,market_distance
+      ,info_received_media
+      ,info_received_lead
+      ,info_received_coop
+      ,info_received_gov
+      ,info_received_ext_other
+      ,crossbreed_users,
+      ,feed_users
+      ,vaccine_users
+      ,network_mean_age
+      ,network_mean_education_cont
+      ,network_mean_hh_depen
+      ,network_mean_farm_size_cont
+      ,network_mean_num_cows
+      ,site
+) %>% 
+  mutate_if(is.logical, as.numeric) %>% 
+  select(is.numeric) %>% 
+  skim() %>% 
+  as.data.frame() %>%
+  select(skim_variable,numeric.mean,numeric.sd, numeric.p0, numeric.p100) %>% 
+  rename("Variable"=1,
+         "Mean"=2,
+         "S.D."=3,
+         "Min."=4,
+         "Max."=5) %>% 
+  mutate(Variable=c("Improved breed use (yes=1)",
+                    "Improved forage use (yes=1)",
+                    "Vaccination use (yes=1)",
+                    "Age (years)",
+                    "Decisionmaker gender (1=male)",
+                   "Economic Dependents (#)",
+                   "Cows owned (#)",
+                    "Group membership (yes=1)",
+                            "Named network members (#)",
+                            "Milk selling price (KES)",
+                            "Market Distance (km)",
+                            "Info. received: Government",
+                            "Info. received: Other extension",
+                            "Info. received: Lead farmer",
+                            "Info. received: Coop",
+                            "Info. received: Media",
+                    "Improv. breed users (#)",
+                          "Improv. forage users (#)",
+                          "Vaccine users (#)",
+                           "Network mean age (years)",
+                           "Network mean education attianment†",
+                          "Network mean economic dependents (#)",
+                          "Network mean farm size^",
+                          "Network mean cows owned (#)"))
+,
+  regression_data %>%filter(decision_maker==T) %>%  
+  mutate(decision_maker_gender=ifelse(decision_maker_gender=="male",1,0)) %>% 
+  select(crossbreed_use, feed_use, vaccine_use
+      ,age
+      ,education
+      ,decision_maker_gender
+      ,hh_depen
+      ,farm_size
+      ,num_cows
+      ,group_member
+      ,network_members
+      ,max_price
+      ,market_distance
+      ,info_received_media
+      ,info_received_lead
+      ,info_received_coop
+      ,info_received_gov
+      ,info_received_ext_other
+      ,crossbreed_users,
+      ,feed_users
+      ,vaccine_users
+      ,network_mean_age
+      ,network_mean_education_cont
+      ,network_mean_hh_depen
+      ,network_mean_farm_size_cont
+      ,network_mean_num_cows
+      ,site
+) %>% 
+  mutate_if(is.logical, as.numeric) %>% 
+  select(is.numeric) %>% 
+  skim() %>% 
+  as.data.frame() %>%
+  select(skim_variable,numeric.mean,numeric.sd, numeric.p0, numeric.p100) %>% 
+  rename("Variable"=1,
+         "Mean"=2,
+         "S.D."=3,
+         "Min."=4,
+         "Max."=5) %>% 
+  mutate(Variable=c("Improved breed use (yes=1)",
+                    "Improved forage use (yes=1)",
+                    "Vaccination use (yes=1)",
+                    "Age (years)",
+                    "Decisionmaker gender (1=male)",
+                   "Economic Dependents (#)",
+                   "Cows owned (#)",
+                    "Group membership (yes=1)",
+                            "Named network members (#)",
+                            "Milk selling price (KES)",
+                            "Market Distance (km)",
+                            "Info. received: Government",
+                            "Info. received: Other extension",
+                            "Info. received: Lead farmer",
+                            "Info. received: Coop",
+                            "Info. received: Media",
+                    "Improv. breed users (#)",
+                          "Improv. forage users (#)",
+                          "Vaccine users (#)",
+                           "Network mean age (years)",
+                           "Network mean education attianment†",
+                          "Network mean economic dependents (#)",
+                          "Network mean farm size^",
+                          "Network mean cows owned (#)"))
+)%>% 
+  as_huxtable()
+
+
+quick_xlsx(stab2, file="stab2.xlsx")
+```
+
+
+## Supplementary Table 3
+
+```{r}
+stab3<-rbind(
+vif(x2)[,3] %>% 
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  mutate(reg="x")
+,
+vif(f2)[,3] %>% 
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  mutate(reg="f")
+,
+vif(v2)[,3] %>% 
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  mutate(reg="v")
+) %>% 
+  pivot_wider(names_from = "reg", values_from = ".") %>% 
+mutate(rowname=fct_recode(rowname,  
+  "Age (years)"="age",
+"Education"="education",
+"Decisionmaker gender"="decision_maker_gender",
+"Economic Dependents (#)"="hh_depen",
+"Farm size"="farm_size",
+"Cows owned (#)"="num_cows",
+"Improved breed cattle (1=yes)"="crossbreed_use",
+"Group membership (yes=1)"="group_member",
+"Named network members (#)"="network_members",
+"Selling price (KES)"="max_price",
+"Market Distance (km)"="market_distance",
+"Info. received: Government"="info_received_gov",
+"Info. received: Other extension"=
+  "info_received_ext_other",
+"Info. received: Lead farmer"= 
+  "info_received_lead",
+"Info. received: Coop"="info_received_coop",
+"Info. received: Media"="info_received_media",
+"Site"="site",
+"Improv. breed users (#)"="crossbreed_users",
+"Square of improv. breed users"="sq_crossbreed_users",
+"Improv. forage users (#)"="feed_users",
+"Square of improv. forage users"="sq_feed_users",
+"Vaccine users (#)"="vaccine_users",
+"Square of vaccine users"="sq_vaccine_users",
+"Network mean age (years)"="network_mean_age",
+"Network mean education attianment†"=
+  "network_mean_education_cont",
+"Network mean economic dependents (#)"="network_mean_hh_depen",
+"Network mean farm size^"="network_mean_farm_size_cont",
+"Network mean cows owned (#)"="network_mean_num_cows"
+)) %>% 
+  arrange(match(rowname, c("Age (years)",
+                                    "Education",
+                                    "Decisionmaker gender",
+                                    "Economic Dependents (#)",
+                                    "Farm size",
+                                    "Cows owned (#)",
+                                    "Improved breed cattle (1=yes)",
+                                    "Group membership (yes=1)",
+                                    "Named network members (#)",
+                                    "Selling price (KES)",
+                                    "Market Distance (km)",
+                                    "Info. received: Government",
+                                    "Info. received: Other extension",
+                                    "Info. received: Lead farmer",
+                                    "Info. received: Coop",
+                                    "Info. received: Media",
+                                    "Site",
+                                    "Improv. breed users (#)",
+                                    "Square of improv. breed users",
+                                    "Improv. forage users (#)",
+                                    "Square of improv. forage users",
+                                    "Vaccine users (#)",
+                                    "Square of vaccine users",
+                                    "Network mean age (years)",
+                                    "Network mean education attianment†",
+                                    "Network mean economic dependents (#)",
+                                    "Network mean farm size^",
+                                    "Network mean cows owned (#)"))) %>%
+  rename("Improved Breed reg."=2, 
+         "Improved Forage reg."=3,
+         "Vaccination reg."=4,
+         "Variable"=1) %>% 
+  as_huxtable()
+
+# quick_xlsx(stab3, file="stab3.xlsx")
+detach("package:car", unload = TRUE)
+```
+
+## Supplementary Table 4
+
+```{r}
+f3<-glm(formula=
+      feed_use~
+       age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +num_cows
+      +crossbreed_use
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +feed_users
+      +sq_feed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+    ,data=regression_data %>%  filter(decision_maker==T)
+    , family = binomial("logit"))
+
+x3<-glm(formula=
+         crossbreed_use~
+         age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +crossbreed_users
+      +sq_crossbreed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+       ,data=regression_data %>%  filter(decision_maker==T)
+       ,family = binomial("logit"))
+
+v3<-glm(formula =
+          vaccine_use ~
+          age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +vaccine_users
+      +sq_vaccine_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+        ,family=binomial(link = "logit")
+        ,data =regression_data %>%  filter(decision_maker==T) %>%  
+                                rownames_to_column() %>%
+                                filter(rowname%!in%c("op259")) %>%
+                                column_to_rownames("rowname")
+        )
+x_no_s<-(glm(
+  data=regression_data %>% mutate(site=as.character(site)) %>% filter(site!="Siaya"),
+  family = binomial("logit"),
+  formula=
+    crossbreed_use~
+    age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +crossbreed_users
+      +sq_crossbreed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+))
+
+v_no_s<-(glm(
+  data=regression_data %>% mutate(site=as.character(site)) %>% filter(site!="Siaya")%>%  
+                                rownames_to_column() %>%
+                                filter(rowname%!in%c("op259")) %>%
+                                column_to_rownames("rowname"),
+  family = binomial("logit"),
+  formula=
+    vaccine_use~
+    age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +vaccine_users
+      +sq_vaccine_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+))
+
+f_no_s<-(glm(
+  data=regression_data %>% mutate(site=as.character(site)) %>% filter(site!="Siaya"),
+  family = binomial("logit"),
+  formula=
+    feed_use~
+    age
+      +education      
+      +decision_maker_gender
+      +hh_depen
+      +farm_size
+      +num_cows
+      +crossbreed_use
+      +group_member
+      +network_members
+      +max_price
+      +market_distance
+      +info_received_media
+      +info_received_lead
+      +info_received_coop
+      +info_received_gov
+      +info_received_ext_other
+      +feed_users
+      +sq_feed_users
+      +network_mean_age
+      +network_mean_education_cont
+      +network_mean_hh_depen
+      +network_mean_farm_size_cont
+      +network_mean_num_cows
+      +site
+))
+
+
+
+x3R2<-as.character(as.numeric(PseudoR2(x3, which="McFadden")))
+f3R2<-as.character(as.numeric(PseudoR2(f3, which="McFadden")))
+v3R2<-as.character(as.numeric(PseudoR2(v3, which="McFadden")))
+xnsR2<-as.character(as.numeric(PseudoR2(x_no_s, which="McFadden")))
+fnsR2<-as.character(as.numeric(PseudoR2(f_no_s, which="McFadden")))
+vnsR2<-as.character(as.numeric(PseudoR2(v_no_s, which="McFadden")))
+
+x3auc<-as.character(as.numeric(auc(roc(x3$y, x3$fitted.values))))
+f3auc<-as.character(as.numeric(auc(roc(f3$y, f3$fitted.values))))
+v3auc<-as.character(as.numeric(auc(roc(v3$y, v3$fitted.values))))
+xnsauc<-as.character(as.numeric(auc(roc(x_no_s$y, x_no_s$fitted.values))))
+fnsauc<-as.character(as.numeric(auc(roc(f_no_s$y, f_no_s$fitted.values))))
+vnsauc<-as.character(as.numeric(auc(roc(v_no_s$y, v_no_s$fitted.values))))
+
+other_regressions_x<-export_summs(margins(x3),margins(x_no_s),
+                              error_position = "same", error_format = " ",
+                   statistics = c(N="df.null", `Log Likelihood`="logLik","BIC","AIC"),
+                   stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,`°`=0.1),
+                   coefs=c("Age (years)"="age",
+                           "Education: None"="educationnone",
+                           "Education: Primary"="educationprimary",
+                           "Decisionmaker gender (1=male)"="decision_maker_gendermale",
+                           "Economic Dependents (#)"="hh_depen",
+                           "Farm size: 0-0.5ac"="farm_size0_0.5",
+                           "Farm size: >2.5ac"="farm_sizegreater_2.6",
+                           "Group membership (yes=1)"="group_member",
+                           "Named network members (#)"="network_members",
+                           "Selling price (KES)"="max_price",
+                           "Market Distance (km)"="market_distance",
+                           "Info. received: Government"="info_received_gov",
+                           "Info. received: Other extension"=
+                             "info_received_ext_other",
+                           "Info. received: Lead farmer"= 
+                             "info_received_lead",
+                           "Info. received: Coop"="info_received_coop",
+                           "Info. received: Media"="info_received_media",
+                           "Site: Rongo"="siteRongo",
+                           "Site: Siaya"="siteSiaya",
+                           "Site: Vihiga"="siteVihiga",
+                           "Improv. breed users (#)"="crossbreed_users",
+                           "Square of improv. breed users"="sq_crossbreed_users",
+                           "Network mean age (years)"="network_mean_age",
+                           "Network mean education attianment†"=
+                             "network_mean_education_cont",
+                           "Network mean economic dependents (#)"="network_mean_hh_depen",
+                           "Network mean farm size^"="network_mean_farm_size_cont",
+                           "Network mean cows owned (#)"="network_mean_num_cows"
+                   )
+)
+
+other_regressions_f<-export_summs(margins(f3),margins(f_no_s),
+                              error_format = "",
+                   statistics = c(N="df.null", `Log Likelihood`="logLik","BIC","AIC"),
+                   stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05),
+                   coefs=c("Age (years)"="age",
+                           "Education: None"="educationnone",
+                           "Education: Primary"="educationprimary",
+                           "Decisionmaker gender (1=male)"="decision_maker_gendermale",
+                           "Economic Dependents (#)"="hh_depen",
+                           "Farm size: 0-0.5ac"="farm_size0_0.5",
+                           "Farm size: >2.5ac"="farm_sizegreater_2.6",
+                           "Cows owned (#)"="num_cows",
+                           "Improved breed cattle (1=yes)"="crossbreed_use",
+                           "Group membership (yes=1)"="group_member",
+                           "Named network members (#)"="network_members",
+                           "Selling price (KES)"="max_price",
+                           "Market Distance (km)"="market_distance",
+                           "Info. received: Government"="info_received_gov",
+                           "Info. received: Other extension"=
+                             "info_received_ext_other",
+                           "Info. received: Lead farmer"= 
+                             "info_received_lead",
+                           "Info. received: Coop"="info_received_coop",
+                           "Info. received: Media"="info_received_media",
+                           "Site: Rongo"="siteRongo",
+                           "Site: Siaya"="siteSiaya",
+                           "Site: Vihiga"="siteVihiga",
+                           "Improv. forage users (#)"="feed_users",
+                           "Square of improv. forage users"="sq_feed_users",
+                           "Network mean age (years)"="network_mean_age",
+                           "Network mean education attianment†"=
+                             "network_mean_education_cont",
+                           "Network mean economic dependents (#)"="network_mean_hh_depen",
+                           "Network mean farm size^"="network_mean_farm_size_cont",
+                           "Network mean cows owned (#)"="network_mean_num_cows"
+                   )
+)
+
+other_regressions_v<-export_summs(margins(v3),margins(v_no_s),
+                   statistics = c(N="df.null", `Log Likelihood`="logLik","BIC","AIC"),
+                   stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05),
+                   coefs=c("Age (years)"="age",
+                           "Education: None"="educationnone",
+                           "Education: Primary"="educationprimary",
+                           "Decisionmaker gender (1=male)"="decision_maker_gendermale",
+                           "Economic Dependents (#)"="hh_depen",
+                           "Farm size: 0-0.5ac"="farm_size0_0.5",
+                           "Farm size: >2.5ac"="farm_sizegreater_2.6",
+                           "Group membership (yes=1)"="group_member",
+                           "Named network members (#)"="network_members",
+                           "Selling price (KES)"="max_price",
+                           "Market Distance (km)"="market_distance",
+                           "Info. received: Government"="info_received_gov",
+                           "Info. received: Other extension"=
+                             "info_received_ext_other",
+                           "Info. received: Lead farmer"= 
+                             "info_received_lead",
+                           "Info. received: Coop"="info_received_coop",
+                           "Info. received: Media"="info_received_media",
+                           "Site: Rongo"="siteRongo",
+                           "Site: Siaya"="siteSiaya",
+                           "Site: Vihiga"="siteVihiga",
+                           "Vaccine users (#)"="vaccine_users",
+                           "Square of vaccine users"="sq_vaccine_users",
+                           "Network mean age (years)"="network_mean_age",
+                           "Network mean education attianment†"=
+                             "network_mean_education_cont",
+                           "Network mean economic dependents (#)"="network_mean_hh_depen",
+                           "Network mean farm size^"="network_mean_farm_size_cont",
+                           "Network mean cows owned (#)"="network_mean_num_cows"
+                   )
+)
+
+
+other_reg_x_mod<-other_regressions_x %>% 
+  as.data.frame() %>% 
+  mutate_all(~ifelse(.=="", NA,.)) %>% 
+  rename(x3=2, xns=3) %>% 
+  mutate(names=ifelse(names=="BIC", "McFadden P.R2",names),
+         names=ifelse(names=="AIC", "AUC",names)) %>% 
+  mutate(across(c(2:3),
+                ~ifelse(str_detect(.,"Model|p < 0.001"),NA, .))) %>% 
+  separate(x3, into = c("x3value","x3sig"), sep = " ")  %>% 
+  separate(xns, into = c("xnsvalue","xnssig"), sep = " ")  %>% 
+  mutate(across(c(2,4
+                  ),~as.numeric(.))) %>% 
+  mutate(across(c(2,4
+                  ),~ifelse(.<1,.*100,.))) %>% 
+  mutate(across(c(2,4
+                  ),~ifelse(names=="N",.+1,.))) %>%   
+  unite("x3values", c(x3value,x3sig), sep = " ", na.rm=T) %>%   
+  unite("xnsvalues", c(xnsvalue,xnssig), sep = " ", na.rm=T) %>% 
+  mutate(x3values=ifelse(names=="McFadden P.R2", x3R2,x3values),
+         xnsvalues=ifelse(names=="McFadden P.R2", xnsR2,xnsvalues)) %>% 
+  mutate(x3values=ifelse(names=="AUC", x3auc,x3values),
+         xnsvalues=ifelse(names=="AUC", xnsauc,xnsvalues)) 
+other_reg_x_mod[1,1]<-"Variable"
+other_reg_x_mod<-other_reg_x_mod %>% 
+  mutate(x3values=ifelse(names=="Variable","Decisionmaker", x3values),
+         xnsvalues=ifelse(names=="Variable","Excluding Siaya", xnsvalues))  
+
+other_reg_f_mod<-other_regressions_f %>% 
+  as.data.frame() %>% 
+  mutate_all(~ifelse(.=="", NA,.)) %>% 
+  rename(f3=2, fns=3) %>% 
+  mutate(names=ifelse(names=="BIC", "McFadden P.R2",names),
+         names=ifelse(names=="AIC", "AUC",names)) %>% 
+  mutate(across(c(2:3),
+                ~ifelse(str_detect(.,"Model|p < 0.001"),NA, .))) %>% 
+  separate(f3, into = c("f3value","f3sig"), sep = " ")  %>% 
+  separate(fns, into = c("fnsvalue","fnssig"), sep = " ")  %>% 
+  mutate(across(c(2,4
+                  ),~as.numeric(.))) %>% 
+  mutate(across(c(2,4
+                  ),~ifelse(.<1,.*100,.))) %>% 
+  mutate(across(c(2,4
+                  ),~ifelse(names=="N",.+1,.))) %>%   
+  unite("f3values", c(f3value,f3sig), sep = " ", na.rm=T) %>%   
+  unite("fnsvalues", c(fnsvalue,fnssig), sep = " ", na.rm=T) %>% 
+  mutate(f3values=ifelse(names=="McFadden P.R2", f3R2,f3values),
+         fnsvalues=ifelse(names=="McFadden P.R2", fnsR2,fnsvalues)) %>% 
+  mutate(f3values=ifelse(names=="AUC", f3auc,f3values),
+         fnsvalues=ifelse(names=="AUC", fnsauc,fnsvalues))
+other_reg_f_mod[1,1]<-"Variable"
+other_reg_f_mod<-other_reg_f_mod %>% 
+  mutate(f3values=ifelse(names=="Variable","Decisionmaker", f3values),
+         fnsvalues=ifelse(names=="Variable","Excluding Siaya", fnsvalues))  
+
+other_reg_v_mod<-other_regressions_v %>% 
+  as.data.frame() %>% 
+  mutate_all(~ifelse(.=="", NA,.)) %>% 
+  rename(v3=2, vns=3) %>% 
+  mutate(names=ifelse(names=="BIC", "McFadden P.R2",names),
+         names=ifelse(names=="AIC", "AUC",names)) %>% 
+  mutate(across(c(2:3),
+                ~ifelse(str_detect(.,"Model|p < 0.001"),NA, .))) %>% 
+  separate(v3, into = c("v3value","v3sig"), sep = " ")  %>% 
+  separate(vns, into = c("vnsvalue","vnssig"), sep = " ")  %>% 
+  mutate(across(c(2,4#,6
+                  ),~as.numeric(.))) %>% 
+  mutate(across(c(2,4#,6
+                  ),~ifelse(.<1,.*100,.))) %>% 
+  mutate(across(c(2,4#,6
+                  ),~ifelse(names=="N",.+1,.))) %>%   
+  unite("v3values", c(v3value,v3sig), sep = " ", na.rm=T) %>%   
+  unite("vnsvalues", c(vnsvalue,vnssig), sep = " ", na.rm=T) %>% 
+  mutate(v3values=ifelse(names=="McFadden P.R2", v3R2,v3values),
+         vnsvalues=ifelse(names=="McFadden P.R2", vnsR2,vnsvalues)) %>% 
+  mutate(v3values=ifelse(names=="AUC", v3auc,v3values),
+         vnsvalues=ifelse(names=="AUC", vnsauc,vnsvalues)) 
+other_reg_v_mod[1,1]<-"Variable"
+other_reg_v_mod<-other_reg_v_mod %>% 
+  mutate( v3values=ifelse(names=="Variable","Decisionmaker", v3values),
+         vnsvalues=ifelse(names=="Variable","Excluding Siaya", vnsvalues))  
+
+
+other_regressions_x$names<-other_reg_x_mod$names
+other_regressions_x$`Model 1`<-as.list(other_reg_x_mod)$x3values
+other_regressions_x$`Model 2`<-as.list(other_reg_x_mod)$xnsvalues
+number_format(other_regressions_x)[56, c(2:3)] <- fmt_pretty()
+
+other_regressions_f$names<-other_reg_f_mod$names
+other_regressions_f$`Model 1`<-as.list(other_reg_f_mod)$f3values
+other_regressions_f$`Model 2`<-as.list(other_reg_f_mod)$fnsvalues
+number_format(other_regressions_f)[58, c(2:3)] <- fmt_pretty()
+
+
+other_regressions_v$names<-other_reg_v_mod$names
+other_regressions_v$`Model 1`<-as.list(other_reg_v_mod)$v3values
+other_regressions_v$`Model 2`<-as.list(other_reg_v_mod)$vnsvalues
+number_format(other_regressions_v)[55, c(2:3)] <- fmt_pretty()
+
+
+quick_xlsx(other_regressions_x,file="other_regressions_x.xlsx" )
+quick_xlsx(other_regressions_f,file="other_regressions_f.xlsx" )
+quick_xlsx(other_regressions_v,file="other_regressions_v.xlsx" )
+```
+
+##Supplementary Table 5
+
+```{r}
+
+```
+
+
+##Supplementary Table 6
+In the interest of efficiency, this table was constructed using Microsoft Excel. The code below serves to compute the values used in this table. 
+```{r}
+
+```
+
+
+
+# Figures
+
+Code within the function "ggsave" is to save plots generated. These are hashed out below.
+
+The following block serves to set a colourblind friendly palatte for plotting figures disaggragated by site.
+
+```{r}
+scale_fill_sites <- function(...){
+    ggplot2:::manual_scale(name="Site",
+        'fill',
+        values = setNames(
+          c('#E69F00', '#009E73', '#0072B2', '#CC79A7'),
+          c("Oyugis","Rongo","Siaya","Vihiga"))
+    )
+}
+
+scale_col_sites <- function(...){
+    ggplot2:::manual_scale(name="Site",
+        'col', 
+         values = setNames(
+           c('#E69F00', '#009E73', '#0072B2', '#CC79A7'),
+           c("Oyugis","Rongo","Siaya","Vihiga"))
+    )
+}
+```
+
+
+## Figure 5
+```{r}
+fig5<-clean_dissertation_data %>% 
+  select(prop_network_known) %>% 
+  group_by(prop_network_known) %>% 
+  summarise(n=n()) %>% 
+  arrange(desc(prop_network_known)) %>% 
+  mutate(n=cumsum(n)) %>% 
+  mutate(n=(n/255)) %>% 
+ggplot()+
+  aes(x=prop_network_known, y=n)+
+  scale_x_reverse(labels = scales::percent)+
+  scale_y_continuous(labels=scales::percent, limits=c(0,1))+
+  geom_step(linewidth=1)+
+  geom_point(size=1.5)+
+  ylab("Proportion of participants
+       (n=255)")+
+  xlab("Proportion of named network members surveyed")+
+  theme(text=element_text(size= 12), legend.position = "none")
+
+ggsave("fig5.jpeg",
+       plot = fig5,
+       width=15,
+       height = 10,
+       units="cm")
+```
+
+## Figure 6
+```{r}
+fig6<-clean_dissertation_data %>% 
+  select(parti_name,person_1, person_2, person_3, person_4, 
+         person_1_distance, person_2_distance, person_3_distance, person_4_distance) %>% 
+  unite("person_1", c(person_1, person_1_distance), sep = "_") %>% 
+  unite("person_2", c(person_2, person_2_distance), sep = "_") %>% 
+  unite("person_3", c(person_3, person_3_distance), sep = "_") %>% 
+  unite("person_4", c(person_4, person_4_distance), sep = "_") %>% 
+  pivot_longer(-parti_name) %>% 
+  separate(value, into = c("ID", "distance"), sep = "_") %>% 
+  select(-name,-parti_name) %>% 
+  mutate(distance=as.numeric(distance)) %>% 
+  drop_na(distance) %>% 
+  group_by(ID) %>% 
+  summarise(Min=min(distance)) %>% 
+  mutate(`Participant (Y/N)`=ifelse(str_detect(ID, "p"),"Surveyed","Unsurveyed")) %>% 
+  mutate(`Site`=case_when(str_detect(ID,"o")~"Oyugis",
+                          str_detect(ID,"r")~"Rongo",
+                          str_detect(ID,"s")~"Siaya",
+                          str_detect(ID,"v")~"Vihiga")) %>% 
+  mutate_all(as.character) %>% 
+  bind_rows(., clean_dissertation_data %>% 
+              select(parti_name,person_1, person_2, person_3, person_4, 
+                     person_1_distance, person_2_distance, person_3_distance, person_4_distance) %>% 
+              unite("person_1", c(person_1, person_1_distance), sep = "_") %>% 
+              unite("person_2", c(person_2, person_2_distance), sep = "_") %>% 
+              unite("person_3", c(person_3, person_3_distance), sep = "_") %>% 
+              unite("person_4", c(person_4, person_4_distance), sep = "_") %>% 
+              pivot_longer(-parti_name) %>% 
+              separate(value, into = c("ID", "distance"), sep = "_") %>% 
+              select(-name,-parti_name) %>% 
+              mutate(distance=as.numeric(distance)) %>% 
+              drop_na(distance) %>% 
+              group_by(ID) %>% 
+              summarise(Min=min(distance)) %>% 
+              mutate(`Participant (Y/N)`
+                     =ifelse(str_detect(ID, "p"),"Surveyed","Unsurveyed")) %>% 
+              mutate(`Site`=case_when(str_detect(ID,"o")~"Oyugis",
+                                      str_detect(ID,"r")~"Rongo",
+                                      str_detect(ID,"s")~"Siaya",
+                                      str_detect(ID,"v")~"Vihiga")) %>% 
+              mutate_all(as.character) %>% 
+              mutate(`Site`="Pooled")
+  ) %>% 
+  mutate(Min=as.numeric(Min)) %>%
+  mutate(`Site`
+         =ordered(`Site`, levels=c("Pooled", "Oyugis","Rongo","Siaya","Vihiga"))) %>%
+  mutate(pat=as.factor(ifelse(Site=="Pooled", "Yes","No"))) %>% 
+  ggplot()+
+  aes(y=Min, x=`Site`, fill=`Participant (Y/N)`, pattern=pat) +
+  geom_boxplot_pattern(outlier.shape = NA,
+                       color = "black", 
+                       pattern_fill = "black",
+                       pattern_angle = 45,
+                       pattern_density = 0.1,
+                       pattern_spacing = 0.025,
+                       pattern_key_scale_factor = 0.6)+
+  coord_cartesian(ylim =  c(0, 60))+
+  scale_pattern_manual(values = c(Yes='stripe', No='none'), guide="none") +
+  scale_fill_manual("",values = (c("#009E73","#D55E00")))+
+  ylab("Distance to nearest participant\n(minutes walking)")+xlab("Site")+
+  theme_minimal(base_size = 12)+
+  # guides(pattern=F)+
+  guides(fill = guide_legend(override.aes = list(pattern = c("none", "none"))))
+
+
+ggsave("fig6.jpeg",
+  plot = fig6,
+  width=15,
+  height = 10,
+  units="cm")
+```
+
+
+## Figure 7 
+```{r}
+library("ggVennDiagram")
+fig7<-lapply(clean_dissertation_data %>% 
+  select(parti_name,vaccine_use, feed_use, crossbreed_use) %>% 
+  mutate(parti_name=as.character(parti_name)) %>% 
+  drop_na(vaccine_use, feed_use, crossbreed_use) %>%
+  mutate(across(c(vaccine_use, feed_use, crossbreed_use),~ifelse(.==T,parti_name,NA))) %>%
+  rename(`Vaccination`=2, `Imporved Forage`=3, `Improved Breed`=4) %>%
+  select(-parti_name) %>%# filter(is.na(vaccine_use)&is.na(feed_use)&is.na(crossbreed_use))
+  as.list() 
+,na.omit) %>% 
+  ggVennDiagram(label_alpha = 0, edge_size = 9,set_color = "black", label = c("count"),
+                category.names = c(" ","Improved Forage", "  ")
+                )+
+  ggplot2::scale_fill_gradient(low="white",high = "red")+
+  theme(legend.position = "none")
+
+ggsave("fig7.jpeg",
+  plot =fig7,
+  width=15,
+  height = 10,
+  units="cm")
+
+```
+
+## Figure 8 
+
+```{r}
+fig8<-rbind(
+clean_dissertation_data %>% 
+  count(crossbreed_use, improv_breed) %>% 
+  rename(use=1, aware=2) %>% 
+  mutate(tech="Improved Breed")
+,
+clean_dissertation_data %>% 
+  count(feed_use, aware_feed_benefits) %>% 
+  rename(use=1, aware=2) %>% 
+  mutate(tech="Improved Forage")
+,
+clean_dissertation_data %>% 
+  count(vaccine_use, vaccine_aware) %>% 
+  rename(use=1, aware=2) %>% 
+  mutate(tech="Vaccination")
+) %>% 
+  drop_na()  %>% 
+  mutate(use=ifelse(use==T, "User","Non-user"),
+         aware=ifelse(aware==T, "Yes","No")) %>% 
+    rename("Aware of \ntechnology \nbenefits"=2) %>%
+  ggplot()+
+  aes(x=use, y=n, fill=`Aware of \ntechnology \nbenefits`)+
+  geom_col()+
+  facet_wrap(vars(tech), nrow=1)+
+  xlab("Technology adoption")+ylab("Count (n)")+
+  theme_minimal(base_size = 12)+
+  theme(strip.text.x = element_text(size = 11),
+        panel.spacing = unit(1.4, "lines")) 
+
+
+ggsave("fig8.jpeg",
+  plot =fig8,
+  width=15,
+  height = 10,
+  units="cm")
+
+```
+
+
+
+## Figure 9
+
+```{r}
+fig9<-clean_dissertation_data %>% 
+  count(site, network_members) %>% 
+  mutate(network_members=as.factor(network_members)) %>% 
+  rename("Named network \nmembers (n)"=network_members) %>% 
+  ggplot()+
+  aes(x=site, y=n, fill=`Named network \nmembers (n)`) %>% 
+  geom_bar(position = "fill", stat="identity")+
+  scale_y_continuous(labels = scales::percent)+
+  scale_fill_colorblind()+
+  xlab("Site")+ylab("Proportion of site participants (%)")+
+  theme_minimal(base_size = 12)
+
+ggsave("fig9.jpeg",
+  plot =fig9,
+  width=15,
+  height = 10,
+  units="cm")
+```
+
+## Figure 10
+
+```{r}
+fig10<-clean_dissertation_data %>%
+  mutate(price_coop=ifelse(site%in%c("Siaya","Vihiga"),NA,price_coop),
+         price_coop=ifelse(price_coop==0,NA,price_coop)) %>% 
+  pivot_longer(cols = c(price_market, price_coop), 
+               names_to = "outlet",values_to = "price")%>% 
+  mutate(outlet=ifelse(outlet=="price_market","Market","Cooperative")) %>% 
+  ggplot()+
+  aes(x=site, y=price, col=outlet)+
+  geom_boxplot(lwd=0.8)+
+  scale_color_manual(values = (c("red","black")), name="Marketing outlet")+
+  xlab("Site")+ylab("Milk selling price (KES)")+
+  theme(text=element_text(size=12))
+
+ggsave("fig10.jpeg",
+  plot =fig10,
+  width=15,
+  height = 10,
+  units="cm")
+```
+
+## Figure 11
+
+```{r}
+fig11<-clean_dissertation_data %>% 
+  select(parti_name,contains("info_"))  %>% 
+  pivot_longer(cols = c(info_received_media, info_received_lead, 
+                        info_received_coop, info_received_gov, info_received_ext_other,
+                        info_source_media, info_source_lead, 
+                        info_source_coop, info_source_gov, info_source_ext_other
+  ),
+  names_to = "type", values_to = "Y/N") %>% 
+  separate(type, into = c("flow","type"), 
+           sep = "(?<=source_|received_|retain_)", remove = F) %>% 
+  mutate(flow=str_remove_all(flow, "info_|_")) %>% 
+  mutate(type=fct_recode(type, 
+                         Cooperative="coop",
+                         Government = "gov",
+                         Media="media", 
+                         `Lead Farmer`="lead", 
+                         `Other Extension`="ext_other")) %>% 
+  mutate(type=factor(type, ordered = T, 
+                     levels=c("Government", "Other Extension",
+                              "Lead Farmer", "Cooperative","Media"))) %>% 
+  group_by(type, flow) %>% 
+  count(`Y/N`) %>% 
+  filter(`Y/N`==T) %>% 
+  ggplot()+
+  aes(x=type, fill=flow, y=n)+
+  geom_col(position = "dodge")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle =45 , vjust = 1.1, hjust=1.1), 
+        text=element_text(size=12),
+        legend.spacing.y = unit(0.5, 'cm'),
+        legend.text=element_text(size=9))+
+  scale_fill_manual(name=" ", values = c("#009E73","#D55E00"), 
+                    labels=c("Previously received \ninformation/training \nfrom",
+                             "Would go to\nfor information"))+
+  xlab("Source")+ylab("Count (n)")+
+  guides(fill = guide_legend(byrow = TRUE))
+
+
+ggsave("fig11.jpeg",
+  plot =fig11,
+  width=15,
+  height = 10,
+  units="cm")
+```
+
+
+## Figure 12
+
+```{r}
+age<-clean_dissertation_data %>% 
+  ggplot()+
+  aes(x=age, y=network_mean_age)+
+  geom_point(cex=0.5)+
+  stat_smooth(se=F)+
+  xlab("Participant age (years)")+ylab("Network mean age \n(years)")+
+  theme(text = element_text(size = 12),
+        axis.title = element_text(size=10))
+
+depen<-clean_dissertation_data %>% 
+    filter(hh_depen<20) %>% 
+  ggplot()+
+  aes(x=hh_depen, y=network_mean_hh_depen)+
+  geom_point(cex=0.5)+
+  stat_smooth(se=F)+
+  xlab("Participants' economic dependents (#)")+
+  ylab("Network mean economic \ndependents (#)")+
+  theme(text = element_text(size = 12),
+        axis.title = element_text(size=10))
+
+cows<-clean_dissertation_data %>% 
+     filter(num_cows<5) %>%
+  ggplot()+
+  aes(x=num_cows, y=network_mean_num_cows)+
+  geom_point(cex=0.5)+
+  stat_smooth(se=F)+
+  xlab("Cows owned by participant (#)")+ylab("Network mean cows \nowned (#)")+
+  theme(text = element_text(size = 12),
+        axis.title = element_text(size=10))
+
+fig12<-ggarrange(
+  ggarrange(age, depen, ncol=2),
+  ggarrange(NULL, cows, NULL, ncol = 3, widths = c(1,2,1)),
+  ncol=1)
+  
+
+ggsave("fig12.jpeg",
+  plot =fig12,
+  width=15,
+  height = 10,
+  units="cm")
+```
+
+
+## Figure 13
+
+<!-- ```{r} -->
+<!-- library(marginaleffects) -->
+
+<!-- fig13<-rbind( -->
+<!--   avg_comparisons(x2, variables = "info_received_ext_other", by = "crossbreed_users")%>% as.data.frame() %>%  -->
+<!--     mutate(source="Non-government", tech="Improved breeds") %>% rename(feed_users=crossbreed_users), -->
+<!-- avg_comparisons(f2, variables = "info_received_ext_other", by = "feed_users") %>% as.data.frame() %>%  -->
+<!--   mutate(source="Non-government", tech="Improved forage"), -->
+<!-- avg_comparisons(f2, variables = "info_received_gov", by = "feed_users") %>% as.data.frame() %>%  -->
+<!--   mutate(source="Government", tech="Improved forage") -->
+<!-- ) %>%  -->
+<!--   mutate(source=factor(source, levels=rev(c("Government","Non-government")))) %>%  -->
+<!--   select(feed_users, estimate, p.value, conf.low, conf.high, source,tech) %>%  -->
+<!--   mutate(`P-value`=ifelse(p.value<0.05,"<0.05","NS")) %>%  -->
+<!--   mutate(across(c(estimate,conf.low, conf.high), ~.*100)) %>%  -->
+<!--   ggplot()+ -->
+<!--   aes(x=feed_users, col=source )+ -->
+<!--   geom_errorbar(aes(ymin=conf.low, ymax=conf.high, linetype=`P-value`),position=position_dodge(0.5), cex=1, alpha=0.4)+ -->
+<!--   geom_line(aes(y=estimate),position=position_dodge(0.5), linewidth=0.75, linetype="solid")+ -->
+<!--   geom_point(aes(y=estimate),position=position_dodge(0.5), cex=2)+ -->
+<!--   facet_wrap(vars(tech), ncol=2)+ -->
+<!--   theme_minimal(base_size = 12)+ -->
+<!--   ylab("Impact of receiving info/training\non adoption probability (%)")+ -->
+<!--   xlab("Number of technology adopters in network")+ -->
+<!--   scale_color_colorblind(name="Info/training source")+ -->
+<!--   theme(legend.position = "bottom", -->
+<!--          legend.box="horizontal", -->
+<!--         legend.background = element_rect(color = "black"), -->
+<!--         strip.text.x = element_text(size = 14), -->
+<!--         axis.text =element_text(size=8),  -->
+<!--         legend.text = element_text(size=8), -->
+<!--         legend.title = element_text(size=10))+ -->
+<!--   guides(colour = guide_legend(title.position="top", title.hjust = 0.5), -->
+<!--          linetype = guide_legend(title.position="top", title.hjust = 0.5))+ -->
+<!--   scale_y_continuous(labels = function(x) sprintf("%+d", x)) -->
+
+<!-- ggsave("fig13.jpeg", -->
+<!--   plot =fig13, -->
+<!--   width=15, -->
+<!--   height = 10, -->
+<!--   units="cm") -->
+<!-- ``` -->
+
+
+<!-- <!-- # ```{r} --> -->
+<!-- <!-- # a<-summary(margins(x2, variables=c("info_received_ext_other"), at=list(crossbreed_users=seq(0,4,1)))) --> -->
+<!-- <!-- # b<-summary(margins(f2, variables=c("info_received_gov","info_received_ext_other"), at=list(feed_users=seq(0,4,1)))) --> -->
+<!-- <!-- # c<-summary(margins(v2, variables=c("info_received_gov","info_received_media"), at=list(vaccine_users=seq(0,4,1)))) --> -->
+<!-- <!-- #  --> -->
+<!-- <!-- #  --> -->
+<!-- <!-- # fig13<-rbind( --> -->
+<!-- <!-- # rbind( --> -->
+<!-- <!-- # a %>%  --> -->
+<!-- <!-- #   as.data.frame() %>%  --> -->
+<!-- <!-- #   select(1, crossbreed_users, AME, p) %>%  --> -->
+<!-- <!-- #   rename(tech_users=crossbreed_users) %>%  --> -->
+<!-- <!-- #   mutate(tech="Improved breed") --> -->
+<!-- <!-- # , --> -->
+<!-- <!-- # b %>%  --> -->
+<!-- <!-- #   select(1, feed_users, AME, p) %>%  --> -->
+<!-- <!-- #   rename(tech_users=feed_users) %>%  --> -->
+<!-- <!-- #   mutate(tech="Improved forage") --> -->
+<!-- <!-- # ) --> -->
+<!-- <!-- # , --> -->
+<!-- <!-- # c %>%  --> -->
+<!-- <!-- #   select(factor, vaccine_users, AME, p) %>%  --> -->
+<!-- <!-- #   rename(tech_users=vaccine_users) %>%  --> -->
+<!-- <!-- #   mutate(tech="Vaccination") --> -->
+<!-- <!-- # )  %>%  --> -->
+<!-- <!-- #   filter(p<0.1) %>% --> -->
+<!-- <!-- #   mutate(factor=fct_recode(factor,  --> -->
+<!-- <!-- #                            "Non-government\nextension"="info_received_ext_other", --> -->
+<!-- <!-- #                            "Government \nextension"="info_received_gov", --> -->
+<!-- <!-- #                            Media="info_received_media")) %>%  --> -->
+<!-- <!-- #   filter(tech!="Vaccination") %>%  --> -->
+<!-- <!-- #   rename(`Information/training\nsource`=factor) %>%  --> -->
+<!-- <!-- #   ggplot()+ --> -->
+<!-- <!-- #   aes(x=tech_users,y=AME, shape=`Information/training\nsource`, col=tech)+ --> -->
+<!-- <!-- #   geom_point(cex=3)+ --> -->
+<!-- <!-- #   geom_line(cex=1, alpha=0.7, linetype="dashed")+ --> -->
+<!-- <!-- #   theme_minimal(base_size = 12)+ --> -->
+<!-- <!-- #   ylab("Average increase in adoption probability\nlinked with receipt of information/training (%)")+ --> -->
+<!-- <!-- #   xlab("Number of technology\nadopters in network")+ --> -->
+<!-- <!-- #   scale_color_colorblind(name="Technology") --> -->
+<!-- <!-- #  --> -->
+<!-- <!-- # # ggsave("fig13.jpeg", --> -->
+<!-- <!-- # #   plot =fig13, --> -->
+<!-- <!-- # #   width=15, --> -->
+<!-- <!-- # #   height = 10, --> -->
+<!-- <!-- # #   units="cm") --> -->
+<!-- <!-- #  --> -->
+<!-- <!-- # ``` --> -->
+<!-- <!-- #  --> -->
+
+<!-- ## Figure 14 -->
+```{r}
+fig14<-clean_dissertation_data %>% 
+  drop_na(crossbreed_use) %>%
+  group_by(farm_size) %>% 
+  count(crossbreed_use) %>% 
+  mutate(crossbreed_use=as.factor(crossbreed_use)) %>% 
+  mutate(crossbreed_use=fct_recode(crossbreed_use, 
+                                   Yes="TRUE",
+                                   No="FALSE")) %>% 
+  mutate(farm_size=factor(farm_size, levels=c("0_0.5","0.6_2.5","greater_2.6"))) %>% 
+  mutate(farm_size=fct_recode(farm_size,
+                              `0-0.5`="0_0.5",
+                              `0.6-2.5`="0.6_2.5",
+                              `>2.5`="greater_2.6")) %>% 
+ggplot()+
+  aes(x=farm_size, fill=crossbreed_use,y=n)+
+  geom_bar(stat="identity", position="fill")+
+  scale_fill_manual("Farmer owns improved\nbreed cattle",values = rev(c("#009E73","#D55E00")))+
+  theme_minimal(base_size = 12)+
+  scale_y_continuous(name="Proportion of participants", labels =scales::percent)+
+  xlab("Farm size (ac)")
+
+# ggsave("fig14.jpeg",
+#   plot =fig14,
+#   width=15,
+#   height = 10,
+#   units="cm")
+
+```
+
+
+
+
+## Figure 14
+
+```{r}
+fig15<-clean_dissertation_data %>% 
+  mutate(`At least 1 named\nnetwork member surveyed`=ifelse(prop_network_known==0, "No","Yes")) %>% 
+  filter(network_members>0) %>% 
+  group_by(network_members) %>% 
+  count(`At least 1 named\nnetwork member surveyed`) %>% 
+  ggplot()+
+  aes(x=network_members, y=n,fill=`At least 1 named\nnetwork member surveyed`)+
+  geom_bar(stat="identity", position="fill")+
+  scale_fill_manual(,values = rev(c("#009E73","#D55E00")))+
+  theme_minimal(base_size = 12)+
+  ylab("Proportion of participants")+
+  scale_y_continuous(labels=scales::percent)+
+  xlab("Number of network\nmembers named")
+
+ggsave("fig15.jpeg",
+       plot = fig15,
+       width=15,
+       height = 10,
+       units="cm")
+```
+
+
+## Supplementary Figure 1
+
+```{r}
+sfig1<-clean_dissertation_data %>% 
+  separate(specific_feed_used, into=c("f1","f2", "f3","f4"), sep = ";") %>% 
+  # select(f1,f2,f3,f4) %>% 
+  pivot_longer(cols=c(f1:f4), names_to = "f",values_to = "forage_used") %>% 
+  count(forage_used) %>% 
+  drop_na() %>%
+  mutate(forage_used=fct_recode(forage_used, 
+                                Napier="napier", 
+                                Brachiaria="bracchiaria",
+                                Calliandra="calliandra",
+                                Desmodium="desmodium",
+                                `Maize stover`="maize", 
+                                `Rhodes grass`="rhodes grass",
+                                `Tree lucernce`="tree lucerne")) %>% 
+  ggplot(aes(x=reorder(forage_used,-n), y=n, fill=forage_used))+
+  geom_col()+
+  theme_minimal()+
+  scale_fill_colorblind()+
+  xlab("Forage variety")+ylab("Variety users (n)")+
+  theme(legend.position = "none")
+
+ggsave("sfig1.jpeg",
+       plot = sfig1,
+       width=15,
+       height = 10,
+       units="cm")
+
+
+```
