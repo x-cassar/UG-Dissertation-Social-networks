@@ -151,7 +151,7 @@ summarise(mean= mean(value,na.rm=T), sd= sd(value, na.rm=T)) %>%
                 "Proportion of income from dairy (%)"="perc_dairy",
                 "Proportion of milk produced sold (%)"="perc_sold",
                 "Farm size: 0-0.5ac"="0_0.5",
-                "Farm size: 2.5-2.5ac"="0.6_2.5",
+                "Farm size: 0.5-2.5ac"="0.6_2.5",
                  "Farm size: >2.5ac"="greater_2.6")) %>% 
     mutate(name=factor(name, ordered = T, levels=c("Participant gender (1=male)",
                                                    "Decisionmaker gender (1=male)",
@@ -163,7 +163,7 @@ summarise(mean= mean(value,na.rm=T), sd= sd(value, na.rm=T)) %>%
                                                    "Education: Primary",
                                                    "Education: Above primary",
                                                    "Farm size: 0-0.5ac",
-                                                    "Farm size: 2.5-2.5ac",
+                                                    "Farm size: 0.5-2.5ac",
                                                      "Farm size: >2.5ac",
                                                    "Cows owned (#)",
                                                    "Milk output per cow (L/day)",
