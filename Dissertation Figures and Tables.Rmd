@@ -283,12 +283,22 @@ quick_xlsx(tab7c, file="tab7c.xlsx")
 ```{r}
 tab8<-regression_data %>% 
   mutate(decision_maker_gender=ifelse(decision_maker_gender=="male",1,0)) %>% 
+  mutate(val=1) %>%
+  pivot_wider(names_from = education, values_from = val) %>%
+  mutate(across(c(none, primary, above_primary), ~ifelse(is.na(.),0,.))) %>%
+  mutate(val=1) %>%
+  pivot_wider(names_from = farm_size, values_from = val) %>%
+  mutate(across(c("0_0.5", "0.6_2.5", "greater_2.6"), ~ifelse(is.na(.),0,.))) %>%
+  mutate(across(c(none, primary, above_primary,"0_0.5", "0.6_2.5", "greater_2.6"), as.numeric)) %>% 
+    mutate(val=1) %>%
+  pivot_wider(names_from = site, values_from = val) %>%
+  mutate(across(c(Oyugis,Rongo,Vihiga,Siaya), ~ifelse(is.na(.),0,.))) %>%
   select(crossbreed_use, feed_use, vaccine_use
       ,age
-      ,education
+      ,none,primary, above_primary
       ,decision_maker_gender
       ,hh_depen
-      ,farm_size
+      , "0_0.5", "0.6_2.5", "greater_2.6"
       ,num_cows
       ,group_member
       ,network_members
@@ -299,6 +309,10 @@ tab8<-regression_data %>%
       ,info_received_coop
       ,info_received_gov
       ,info_received_ext_other
+      ,Oyugis
+      ,Rongo
+      ,Vihiga
+      ,Siaya
       ,crossbreed_users,
       ,feed_users
       ,vaccine_users
@@ -307,7 +321,6 @@ tab8<-regression_data %>%
       ,network_mean_hh_depen
       ,network_mean_farm_size_cont
       ,network_mean_num_cows
-      ,site
 ) %>% 
   mutate_if(is.logical, as.numeric) %>% 
   select(is.numeric) %>% 
@@ -323,9 +336,15 @@ tab8<-regression_data %>%
                     "Improved forage use (yes=1)",
                     "Vaccination use (yes=1)",
                     "Age (years)",
+                    "Education: None",
+                    "Education: Primary",
+                    "Education: Above primary",
                     "Decisionmaker gender (1=male)",
-                   "Economic Dependents (#)",
-                   "Cows owned (#)",
+                    "Economic Dependents (#)",
+                    "Farm size: 0-0.5ac",
+                    "Farm size: 2.5-2.5ac",
+                    "Farm size: >2.5ac",
+                    "Cows owned (#)",
                     "Group membership (yes=1)",
                             "Named network members (#)",
                             "Milk selling price (KES)",
@@ -335,11 +354,15 @@ tab8<-regression_data %>%
                             "Info. received: Lead farmer",
                             "Info. received: Coop",
                             "Info. received: Media",
+                    "Oyugis",
+                    "Rongo",
+                    "Vihiga",
+                    "Siaya",
                     "Improv. breed users (#)",
                           "Improv. forage users (#)",
                           "Vaccine users (#)",
                            "Network mean age (years)",
-                           "Network mean education attianment†",
+                           "Network mean education attianmentâ ",
                           "Network mean economic dependents (#)",
                           "Network mean farm size^",
                           "Network mean cows owned (#)")) %>% 
