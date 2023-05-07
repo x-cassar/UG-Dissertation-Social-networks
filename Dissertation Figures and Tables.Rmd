@@ -342,7 +342,7 @@ tab8<-regression_data %>%
                     "Decisionmaker gender (1=male)",
                     "Economic Dependents (#)",
                     "Farm size: 0-0.5ac",
-                    "Farm size: 2.5-2.5ac",
+                    "Farm size: 0.5-2.5ac",
                     "Farm size: >2.5ac",
                     "Cows owned (#)",
                     "Group membership (yes=1)",
