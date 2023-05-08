@@ -362,7 +362,7 @@ tab8<-regression_data %>%
                           "Improv. forage users (#)",
                           "Vaccine users (#)",
                            "Network mean age (years)",
-                           "Network mean education attianmentâ ",
+                           "Network mean educational attianmentâ ",
                           "Network mean economic dependents (#)",
                           "Network mean farm size^",
                           "Network mean cows owned (#)")) %>% 
@@ -505,7 +505,7 @@ full_regression<-export_summs(margins(x0),margins(f0),margins(v1), error_format 
                            "Vaccine users (#)"="vaccine_users",
                            "Square of vaccine users"="sq_vaccine_users",
                            "Network mean age (years)"="network_mean_age",
-                           "Network mean education attianment†"=
+                           "Network mean educational attianment†"=
                              "network_mean_education_cont",
                            "Network mean economic dependents (#)"="network_mean_hh_depen",
                            "Network mean farm size^"="network_mean_farm_size_cont",
@@ -696,7 +696,7 @@ perc50_regressions<-export_summs(margins(x2),margins(f2),margins(v2), error_form
                            "Vaccine users (#)"="vaccine_users",
                            "Square of vaccine users"="sq_vaccine_users",
                            "Network mean age (years)"="network_mean_age",
-                           "Network mean education attianment†"=
+                           "Network mean educational attianment†"=
                              "network_mean_education_cont",
                            "Network mean economic dependents (#)"="network_mean_hh_depen",
                            "Network mean farm size^"="network_mean_farm_size_cont",
@@ -834,7 +834,7 @@ mutate(rowname=fct_recode(rowname,
 "Vaccine users (#)"="vaccine_users",
 "Square of vaccine users"="sq_vaccine_users",
 "Network mean age (years)"="network_mean_age",
-"Network mean education attianment†"=
+"Network mean educational attianment†"=
   "network_mean_education_cont",
 "Network mean economic dependents (#)"="network_mean_hh_depen",
 "Network mean farm size^"="network_mean_farm_size_cont",
@@ -864,7 +864,7 @@ mutate(rowname=fct_recode(rowname,
                                     "Vaccine users (#)",
                                     "Square of vaccine users",
                                     "Network mean age (years)",
-                                    "Network mean education attianment†",
+                                    "Network mean educational attianment†",
                                     "Network mean economic dependents (#)",
                                     "Network mean farm size^",
                                     "Network mean cows owned (#)"))) %>%
@@ -939,7 +939,7 @@ rbind(
                           "Improv. forage users (#)",
                           "Vaccine users (#)",
                            "Network mean age (years)",
-                           "Network mean education attianment†",
+                           "Network mean educational attianment†",
                           "Network mean economic dependents (#)",
                           "Network mean farm size^",
                           "Network mean cows owned (#)"))
@@ -1002,7 +1002,7 @@ rbind(
                           "Improv. forage users (#)",
                           "Vaccine users (#)",
                            "Network mean age (years)",
-                           "Network mean education attianment†",
+                           "Network mean educational attianment†",
                           "Network mean economic dependents (#)",
                           "Network mean farm size^",
                           "Network mean cows owned (#)"))
@@ -1061,7 +1061,7 @@ mutate(rowname=fct_recode(rowname,
 "Vaccine users (#)"="vaccine_users",
 "Square of vaccine users"="sq_vaccine_users",
 "Network mean age (years)"="network_mean_age",
-"Network mean education attianment†"=
+"Network mean educational attianment†"=
   "network_mean_education_cont",
 "Network mean economic dependents (#)"="network_mean_hh_depen",
 "Network mean farm size^"="network_mean_farm_size_cont",
@@ -1091,7 +1091,7 @@ mutate(rowname=fct_recode(rowname,
                                     "Vaccine users (#)",
                                     "Square of vaccine users",
                                     "Network mean age (years)",
-                                    "Network mean education attianment†",
+                                    "Network mean educational attianment†",
                                     "Network mean economic dependents (#)",
                                     "Network mean farm size^",
                                     "Network mean cows owned (#)"))) %>%
@@ -1330,7 +1330,7 @@ other_regressions_x<-export_summs(margins(x3),margins(x_no_s),
                            "Improv. breed users (#)"="crossbreed_users",
                            "Square of improv. breed users"="sq_crossbreed_users",
                            "Network mean age (years)"="network_mean_age",
-                           "Network mean education attianment†"=
+                           "Network mean educational attianment†"=
                              "network_mean_education_cont",
                            "Network mean economic dependents (#)"="network_mean_hh_depen",
                            "Network mean farm size^"="network_mean_farm_size_cont",
@@ -1368,7 +1368,7 @@ other_regressions_f<-export_summs(margins(f3),margins(f_no_s),
                            "Improv. forage users (#)"="feed_users",
                            "Square of improv. forage users"="sq_feed_users",
                            "Network mean age (years)"="network_mean_age",
-                           "Network mean education attianment†"=
+                           "Network mean educational attianment†"=
                              "network_mean_education_cont",
                            "Network mean economic dependents (#)"="network_mean_hh_depen",
                            "Network mean farm size^"="network_mean_farm_size_cont",
@@ -1403,7 +1403,7 @@ other_regressions_v<-export_summs(margins(v3),margins(v_no_s),
                            "Vaccine users (#)"="vaccine_users",
                            "Square of vaccine users"="sq_vaccine_users",
                            "Network mean age (years)"="network_mean_age",
-                           "Network mean education attianment†"=
+                           "Network mean educational attianment†"=
                              "network_mean_education_cont",
                            "Network mean economic dependents (#)"="network_mean_hh_depen",
                            "Network mean farm size^"="network_mean_farm_size_cont",
