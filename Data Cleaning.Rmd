@@ -36,7 +36,7 @@ The dataset imported - and made available with the dissertation submission - was
 Participant names have been anonymised to alphanumeric codes, where the first letter indicates which site the participant forms part of - hence one of "O", "R","S" and "V"- the second indicates whether the individual was surveyed ("p") or not ("x"). The numbers are randomly allocated and bear no meaning.
 
 ```{r}
-dissertation_data <- read_csv("Kenya_dissertation_data.csv")
+dissertation_data <- read_csv("B160473 - Kenya_dissertation_data.csv")
 ```
 
 
